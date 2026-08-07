@@ -13,6 +13,7 @@ export interface SessionTab {
   size: number
   dirty: boolean
   untitled?: boolean
+  languageHint?: string
   /** Present for untitled / dirty / small text buffers. */
   content?: string
 }
@@ -55,6 +56,7 @@ export function tabToSession(tab: OpenTab): SessionTab {
     size: tab.size,
     dirty: tab.dirty,
     untitled: tab.untitled,
+    languageHint: tab.languageHint,
   }
   const needContent =
     tab.untitled

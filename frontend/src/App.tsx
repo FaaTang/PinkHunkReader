@@ -192,6 +192,7 @@ function AppShell() {
               content: st.content ?? '',
               dirty: Boolean(st.dirty || (st.content ?? '').length > 0),
               untitled: true,
+              languageHint: st.languageHint,
             })
             continue
           }
@@ -225,6 +226,7 @@ function AppShell() {
               size: st.size,
               content: st.content,
               dirty: st.dirty,
+              languageHint: st.languageHint,
             })
             continue
           }
@@ -439,16 +441,22 @@ function AppShell() {
 
   const formatActiveJson = useCallback(() => {
     const tab = activeTab
-    if (!tab?.editable || tab.largeMode) return
+    if (!tab?.editable || tab.largeMode || !activePath) return
     const result = toggleJsonFormat(tab.content)
     if (!result.ok) {
       setError(result.error)
       return
     }
-    updateActiveContent(result.text)
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.path === activePath
+          ? { ...t, content: result.text, dirty: true, languageHint: 'json' }
+          : t,
+      ),
+    )
     setStatus(result.mode === 'pretty' ? 'JSON formatted' : 'JSON compacted')
     setError('')
-  }, [activeTab, updateActiveContent])
+  }, [activePath, activeTab])
 
   const selectTab = useCallback((path: string) => {
     if (path === activePath) return

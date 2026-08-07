@@ -1,6 +1,8 @@
-export function langFromPath(path: string): string {
+import { isJsonFile } from './jsonFormat'
+
+export function langFromPath(path: string, name = ''): string {
   const lower = path.toLowerCase()
-  if (lower.endsWith('.json') || lower.endsWith('.jsonc')) return 'json'
+  if (isJsonFile(path, name)) return 'json'
   if (lower.endsWith('.ts') || lower.endsWith('.tsx')) return 'typescript'
   if (lower.endsWith('.js') || lower.endsWith('.jsx') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return 'javascript'
   if (lower.endsWith('.go')) return 'go'
