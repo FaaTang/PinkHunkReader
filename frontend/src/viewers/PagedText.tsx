@@ -145,7 +145,7 @@ export function PagedText({ path, onDirty, registerSave }: Props) {
         <MonacoEditor
           height="100%"
           language={langFromPath(path)}
-          theme="light"
+          theme="vs"
           defaultValue=""
           onMount={(ed, monaco) => {
             paging.handleMount(ed, monaco)

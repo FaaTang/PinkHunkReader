@@ -17,8 +17,19 @@ export function toggleJsonFormat(text: string): { ok: true; text: string; mode: 
   return { ok: true, text: pretty, mode: 'pretty' }
 }
 
-export function isJsonTab(path: string, name: string): boolean {
+/** True when path or display name looks like a JSON file. */
+export function isJsonFile(path: string, name: string): boolean {
   const p = path.toLowerCase()
   const n = name.toLowerCase()
-  return p.endsWith('.json') || n.endsWith('.json') || p.startsWith('untitled:')
+  return (
+    p.endsWith('.json')
+    || p.endsWith('.jsonc')
+    || n.endsWith('.json')
+    || n.endsWith('.jsonc')
+  )
+}
+
+/** Show Format JSON for JSON files and untitled buffers (paste-then-format). */
+export function isJsonTab(path: string, name: string): boolean {
+  return isJsonFile(path, name) || path.toLowerCase().startsWith('untitled:')
 }

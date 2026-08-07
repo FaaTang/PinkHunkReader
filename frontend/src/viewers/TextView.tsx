@@ -9,12 +9,15 @@ interface Props {
   content: string
   editable: boolean
   path: string
+  name: string
+  languageHint?: string
   onChange: (v: string) => void
 }
 
-export function TextView({ content, editable, path, onChange }: Props) {
+export function TextView({ content, editable, path, name, languageHint, onChange }: Props) {
   const editorRef = useRef<any>(null)
   const lineCount = useMemo(() => Math.max(1, content.split(/\r?\n/).length), [content])
+  const language = languageHint || langFromPath(path, name)
 
   const goLine = useCallback((n: number) => {
     const ed = editorRef.current
@@ -40,8 +43,8 @@ export function TextView({ content, editable, path, onChange }: Props) {
       <div className="editor-wrap" style={{ flex: 1 }}>
         <MonacoEditor
           height="100%"
-          language={langFromPath(path)}
-          theme="light"
+          language={language}
+          theme="vs"
           value={content}
           onMount={(ed) => {
             editorRef.current = ed

@@ -29,7 +29,16 @@ export function ViewerHost({ tab, onChange, onDirty, registerSave }: Props) {
       {tab.kind === 'text'
         ? tab.largeMode
           ? <PagedText path={tab.path} onDirty={onDirty} registerSave={registerSave} />
-          : <TextView content={tab.content} editable={tab.editable} path={tab.path} onChange={onChange} />
+          : (
+            <TextView
+              content={tab.content}
+              editable={tab.editable}
+              path={tab.path}
+              name={tab.name}
+              languageHint={tab.languageHint}
+              onChange={onChange}
+            />
+          )
         : null}
       {tab.kind === 'pdf' ? <PdfView path={tab.path} /> : null}
       {tab.kind === 'image' ? <ImageView path={tab.path} name={tab.name} /> : null}
