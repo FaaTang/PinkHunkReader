@@ -1,0 +1,382 @@
+name: Release
+
+# 仅在向配置分支上的提交推送 v* tag 时发布（避免同步上游 tag 时误触发）
+# 可在仓库 Settings → Secrets and variables → Actions → Variables 设置 RELEASE_BRANCH（默认 main）
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_BRANCH: ${{ vars.RELEASE_BRANCH || 'main' }}
+
+jobs:
+  gate:
+    name: Verify release trigger
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check tag commit is on release branch
+        id: check
+        env:
+          RELEASE_BRANCH: ${{ env.RELEASE_BRANCH }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].+)?$ ]]; then
+            echo "Tag ${GITHUB_REF_NAME} is not a semver-like version; skip release"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git fetch origin "${RELEASE_BRANCH}"
+          if ! git rev-parse --verify "origin/${RELEASE_BRANCH}" >/dev/null 2>&1; then
+            echo "Branch ${RELEASE_BRANCH} does not exist on origin; skip release"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${RELEASE_BRANCH}"; then
+            echo "Tag commit is on branch ${RELEASE_BRANCH}; proceed with release"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag commit is not on branch ${RELEASE_BRANCH}; skip release (likely synced upstream tag)"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  frontend:
+    name: Build frontend
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache Wails CLI
+        uses: actions/cache@v5
+        id: wails-cache
+        with:
+          path: |
+            .cache/wails-bin
+            .cache/wails-gocache
+          key: wails-v2.11.0-${{ runner.os }}-${{ runner.arch }}
+          restore-keys: |
+            wails-v2.11.0-${{ runner.os }}-${{ runner.arch }}-
+            wails-v2.11.0-${{ runner.os }}-
+
+      - name: Install Wails
+        if: steps.wails-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/wails-bin .cache/wails-gocache
+          GOCACHE="$PWD/.cache/wails-gocache" GOBIN="$PWD/.cache/wails-bin" go install -trimpath github.com/wailsapp/wails/v2/cmd/wails
+
+      - name: Configure Wails PATH
+        shell: bash
+        run: echo "$PWD/.cache/wails-bin" >> "$GITHUB_PATH"
+
+      - name: Regenerate bindings and build dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p frontend/dist
+          printf '<!doctype html><title>PinkHunkReader</title>\n' > frontend/dist/index.html
+          wails generate module
+          npm --prefix frontend ci
+          npm --prefix frontend run build
+
+      - name: Pack frontend dist
+        shell: bash
+        run: tar -cf frontend-dist.tar -C frontend/dist .
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-dist
+          path: frontend-dist.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs:
+      - gate
+      - frontend
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows/amd64
+            os_name: Windows
+            arch_name: Amd64
+            build_name: pinkhunkreader-build-windows-amd64
+            artifact_glob: 'PinkHunkReader-*.exe'
+          - os: macos-latest
+            platform: darwin/arm64
+            os_name: MacOS
+            arch_name: Arm64
+            build_name: pinkhunkreader-build-darwin-arm64
+            artifact_glob: 'PinkHunkReader-*.dmg'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v6
+        with:
+          name: frontend-dist
+          path: frontend-artifact
+
+      - name: Extract frontend dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p frontend/dist
+          test -s frontend-artifact/frontend-dist.tar
+          tar -xf frontend-artifact/frontend-dist.tar -C frontend/dist
+          test -s frontend/dist/index.html
+
+      - name: Cache Wails CLI
+        uses: actions/cache@v5
+        id: wails-cache
+        with:
+          path: |
+            .cache/wails-bin
+            .cache/wails-gocache
+          key: wails-v2.11.0-${{ runner.os }}-${{ runner.arch }}
+          restore-keys: |
+            wails-v2.11.0-${{ runner.os }}-${{ runner.arch }}-
+            wails-v2.11.0-${{ runner.os }}-
+
+      - name: Install Wails
+        if: steps.wails-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/wails-bin .cache/wails-gocache
+          GOCACHE="$PWD/.cache/wails-gocache" GOBIN="$PWD/.cache/wails-bin" go install -trimpath github.com/wailsapp/wails/v2/cmd/wails
+
+      - name: Configure Wails PATH
+        shell: bash
+        run: echo "$PWD/.cache/wails-bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        shell: bash
+        env:
+          GOFLAGS: -mod=readonly
+        run: |
+          set -euo pipefail
+          wails build -s -skipbindings -platform ${{ matrix.platform }} -clean -o ${{ matrix.build_name }} -ldflags "-s -w"
+
+      - name: Package Windows EXE
+        if: startsWith(matrix.platform, 'windows/')
+        shell: pwsh
+        run: |
+          Set-Location build/bin
+          $version = "${{ github.ref_name }}"
+          if ($version.StartsWith("v")) {
+              $version = $version.Substring(1)
+          }
+          $target = "${{ matrix.build_name }}"
+          $finalExeName = "PinkHunkReader-$version-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe"
+          if (Test-Path "$target.exe") {
+              $finalExe = "$target.exe"
+          } elseif (Test-Path "$target") {
+              Rename-Item -Path "$target" -NewName "$target.exe"
+              $finalExe = "$target.exe"
+          } else {
+              Write-Error "Build output '$target' not found"
+              exit 1
+          }
+          Copy-Item -LiteralPath $finalExe -Destination "..\\..\\$finalExeName" -Force
+          Write-Host "Output $finalExeName"
+
+      - name: Package macOS DMG
+        if: startsWith(matrix.platform, 'darwin/')
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install create-dmg
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          cd build/bin
+          ls -la
+
+          APP_PATH=$(find . -maxdepth 1 -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app found — Wails darwin builds should produce PinkHunkReader.app"
+            exit 1
+          fi
+          APP_NAME=$(basename "$APP_PATH")
+
+          if command -v xattr >/dev/null 2>&1; then
+            xattr -cr "$APP_NAME" || true
+          fi
+          codesign --force --deep --sign - "$APP_NAME"
+
+          DMG_NAME="${{ matrix.build_name }}.dmg"
+          FINAL_NAME="PinkHunkReader-${VERSION}-${{ matrix.os_name }}-${{ matrix.arch_name }}.dmg"
+
+          set +e
+          create-dmg \
+            --volname "PinkHunkReader" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "$APP_NAME" 200 190 \
+            --hide-extension "$APP_NAME" \
+            --app-drop-link 600 185 \
+            "$DMG_NAME" \
+            "$APP_NAME"
+          set -e
+
+          if [ -f "$DMG_NAME" ]; then
+            mv "$DMG_NAME" "../../$FINAL_NAME"
+            echo "Output $FINAL_NAME"
+          else
+            FINAL_NAME="PinkHunkReader-${VERSION}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip"
+            ditto -c -k --sequesterRsrc --keepParent "$APP_NAME" "../../$FINAL_NAME"
+            echo "DMG unavailable; wrote zip fallback $FINAL_NAME"
+          fi
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-artifacts-${{ strategy.job-index }}
+          path: |
+            PinkHunkReader-*.exe
+            PinkHunkReader-*.dmg
+            PinkHunkReader-*.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publish Release
+    needs:
+      - gate
+      - build
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: release-assets
+          pattern: build-artifacts-*
+          merge-multiple: true
+
+      - name: List Assets
+        run: ls -R release-assets
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          cd release-assets
+          FILES=()
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              FILES+=("$file")
+            fi
+          done < <(find . -maxdepth 1 -type f ! -name SHA256SUMS -exec basename {} \; | sort)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No assets to checksum"
+            : > SHA256SUMS
+          else
+            sha256sum "${FILES[@]}" > SHA256SUMS
+          fi
+
+      - name: Generate Changelog
+        id: changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-creatordate | grep -E '^v' | sed -n '2p' || true)
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="$TAG"
+          else
+            RANGE="${PREV_TAG}..${TAG}"
+          fi
+
+          COMMITS=$(git log "$RANGE" --no-merges --pretty=format:'- %s' 2>/dev/null || true)
+          {
+            echo "# PinkHunkReader ${TAG}"
+            echo
+            echo "## Downloads"
+            echo
+            echo "| Platform | Asset |"
+            echo "|----------|-------|"
+            echo "| Windows AMD64 | \`PinkHunkReader-*-Windows-Amd64.exe\` |"
+            echo "| macOS ARM64 | \`PinkHunkReader-*-MacOS-Arm64.dmg\` (or \`.zip\` fallback) |"
+            echo
+            echo "## Notes"
+            echo
+            echo "- **Windows**: run the \`.exe\` (WebView2 required; usually preinstalled on Win10/11)."
+            echo "- **macOS Apple Silicon**: open the DMG and drag the app to Applications. First launch may need *System Settings → Privacy & Security* to allow the unsigned/ad-hoc build."
+            echo
+            echo "## Changes"
+            echo
+            if [ -z "$COMMITS" ]; then
+              echo "No commits recorded."
+            else
+              printf '%s\n' "$COMMITS"
+            fi
+            if [ -n "$PREV_TAG" ]; then
+              echo
+              echo "---"
+              echo "**Full changelog**: [${PREV_TAG}...${TAG}](${{ github.server_url }}/${{ github.repository }}/compare/${PREV_TAG}...${TAG})"
+            fi
+          } > /tmp/changelog.md
+          echo "changelog_file=/tmp/changelog.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: PinkHunkReader ${{ github.ref_name }}
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          make_latest: true
+          body_path: ${{ steps.changelog.outputs.changelog_file }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

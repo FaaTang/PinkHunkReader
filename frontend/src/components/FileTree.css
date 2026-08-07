@@ -1,0 +1,39 @@
+.tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px calc(8px + var(--depth, 0) * 12px);
+  cursor: pointer;
+  user-select: none;
+  color: var(--ph-fg-2);
+  border-radius: 0;
+}
+
+.tree-row:hover {
+  background: var(--ph-bg-hover);
+}
+
+.tree-row.active {
+  background: var(--ph-bg-selected);
+  color: var(--ph-accent-2);
+}
+
+.tree-icon {
+  width: 14px;
+  color: var(--ph-fg-4);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,214 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--ph-bg-app);
+}
+
+.toolbar {
+  height: var(--ph-toolbar-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--ph-bg-chrome);
+  border-bottom: 1px solid var(--ph-br-1);
+}
+
+/* macOS: native traffic lights top-left; leave inset + make chrome draggable. */
+html.platform-mac .toolbar {
+  height: 52px;
+  padding-left: 78px;
+  --wails-draggable: drag;
+}
+
+html.platform-mac .toolbar button,
+html.platform-mac .toolbar .open-menu,
+html.platform-mac .toolbar input,
+html.platform-mac .toolbar a {
+  --wails-draggable: no-drag;
+}
+
+html.platform-mac {
+  --ph-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Noto Sans SC", sans-serif;
+  --ph-toolbar-height: 52px;
+}
+
+.toolbar-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--ph-br-2);
+  border-radius: 6px;
+  background: var(--ph-bg-panel);
+  color: var(--ph-fg-2);
+}
+
+.toolbar-btn.primary {
+  background: var(--ph-accent);
+  border-color: var(--ph-accent);
+  color: #fff;
+}
+
+.toolbar-btn.primary:hover:not(:disabled) {
+  background: var(--ph-accent-2);
+}
+
+.root-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ph-fg-4);
+  font-size: 12px;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.sidebar {
+  width: var(--ph-sidebar-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--ph-br-1);
+  background: var(--ph-bg-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-title {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ph-fg-4);
+  border-bottom: 1px solid var(--ph-br-1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-title-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-refresh {
+  height: 22px;
+  min-width: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--ph-br-1);
+  border-radius: 4px;
+  background: var(--ph-bg-panel);
+  color: var(--ph-fg-3);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-refresh:hover:not(:disabled) {
+  color: var(--ph-accent-2);
+  border-color: var(--ph-accent);
+}
+
+.sidebar-refresh:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ph-bg-panel-2);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--ph-fg-4);
+}
+
+.empty h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--ph-fg-2);
+  font-weight: 600;
+}
+
+.error-banner {
+  padding: 6px 12px;
+  background: #fef2f2;
+  color: var(--ph-danger);
+  border-bottom: 1px solid #fecaca;
+  font-size: 12px;
+}
+
+.status {
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-top: 1px solid var(--ph-br-1);
+  background: var(--ph-bg-chrome);
+  color: var(--ph-fg-4);
+  font-size: 11px;
+  gap: 12px;
+}
+
+/* OS fullscreen: hide chrome so content fills the screen (browser F11-like). */
+.layout.is-fullscreen .toolbar,
+.layout.is-fullscreen .sidebar,
+.layout.is-fullscreen .status,
+.layout.is-fullscreen .error-banner,
+.layout.is-fullscreen .tabbar {
+  display: none;
+}
+
+.layout.is-fullscreen .body {
+  flex: 1;
+}
+
+.layout.is-fullscreen .main {
+  background: var(--ph-bg-panel-2);
+}
+
+.fs-exit-fab {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fafc;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s ease;
+}
+
+/* macOS: keep exit control on the leading side (near traffic lights), not Windows top-right. */
+html.platform-mac .fs-exit-fab {
+  right: auto;
+  left: 78px;
+  top: 14px;
+}
+
+.fs-exit-fab:hover {
+  opacity: 1;
+}

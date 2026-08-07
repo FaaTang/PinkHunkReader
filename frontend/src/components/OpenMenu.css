@@ -1,0 +1,132 @@
+.open-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.open-menu .toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.open-menu-caret {
+  font-size: 10px;
+  opacity: 0.85;
+  line-height: 1;
+}
+
+.open-menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--ph-br-2);
+  border-radius: 8px;
+  background: var(--ph-bg-panel);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  overflow: visible;
+}
+
+.open-menu-panel > button,
+.open-menu-submenu-trigger {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ph-fg-2);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.open-menu-panel > button:hover,
+.open-menu-submenu.is-open > .open-menu-submenu-trigger,
+.open-menu-submenu:hover > .open-menu-submenu-trigger {
+  background: var(--ph-bg-hover);
+  color: var(--ph-fg-1);
+}
+
+.open-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--ph-br-1);
+}
+
+.open-menu-submenu {
+  position: relative;
+}
+
+.open-menu-submenu-trigger {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.open-menu-submenu-chevron {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.open-menu-flyout {
+  position: absolute;
+  left: calc(100% + 2px);
+  top: -4px;
+  z-index: 41;
+  min-width: 240px;
+  max-width: min(420px, 70vw);
+  max-height: min(70vh, 480px);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--ph-br-2);
+  border-radius: 8px;
+  background: var(--ph-bg-panel);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.open-menu-flyout-empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--ph-fg-4);
+}
+
+.open-menu-recent {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ph-fg-2);
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.open-menu-recent:hover {
+  background: var(--ph-bg-hover);
+  color: var(--ph-fg-1);
+}
+
+.open-menu-recent-name {
+  font-size: 13px;
+  color: var(--ph-fg-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-menu-recent-path {
+  font-size: 11px;
+  color: var(--ph-fg-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
