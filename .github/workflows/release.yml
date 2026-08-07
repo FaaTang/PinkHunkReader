@@ -1,13 +1,17 @@
 name: Release
 
-# Trigger: git push of v* tags, creating a v* tag in the GitHub UI, or manual run.
+# Trigger: git push of v* tags, or Actions → Release → Run workflow.
+# Do not also listen to `create` — git tag push fires both push+create and would run twice.
 # Optional repo variable RELEASE_BRANCH (default main) — tag commit must be on that branch.
 on:
   push:
     tags:
       - 'v*'
-  create:
   workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -19,11 +23,6 @@ jobs:
   gate:
     name: Verify release trigger
     runs-on: ubuntu-latest
-    # UI "Create tag" fires `create` (not `push`); ignore branch creates.
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      (github.event_name == 'create' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v'))
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
