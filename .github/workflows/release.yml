@@ -108,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cache/wails-bin .cache/wails-gocache
-          GOCACHE="$PWD/.cache/wails-gocache" GOBIN="$PWD/.cache/wails-bin" go install -trimpath github.com/wailsapp/wails/v2/cmd/wails
+          GOCACHE="$PWD/.cache/wails-gocache" GOBIN="$PWD/.cache/wails-bin" go install -trimpath github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
       - name: Configure Wails PATH
         shell: bash
@@ -202,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cache/wails-bin .cache/wails-gocache
-          GOCACHE="$PWD/.cache/wails-gocache" GOBIN="$PWD/.cache/wails-bin" go install -trimpath github.com/wailsapp/wails/v2/cmd/wails
+          GOCACHE="$PWD/.cache/wails-gocache" GOBIN="$PWD/.cache/wails-bin" go install -trimpath github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
       - name: Configure Wails PATH
         shell: bash

@@ -2,9 +2,9 @@
 
 package tools
 
-// Keep Wails CLI/build transitive deps in go.mod / go.sum so CI can use -mod=readonly.
+// Pull Wails CLI + build transitive deps into go.mod / go.sum so CI can
+// `go install` / `wails generate` / `wails build` under -mod=readonly.
 import (
-	_ "github.com/tc-hib/winres"
-	_ "github.com/tc-hib/winres/version"
+	_ "github.com/wailsapp/wails/v2/cmd/wails"
 	_ "github.com/wailsapp/wails/v2/pkg/commands/build"
 )
