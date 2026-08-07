@@ -166,6 +166,47 @@
   font-size: 12px;
 }
 
+.settings-proxy-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  padding: 4px 0 2px;
+}
+
+.settings-proxy-grid.disabled {
+  opacity: 0.65;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ph-fg-4);
+}
+
+.settings-field-span {
+  grid-column: 1 / -1;
+}
+
+.settings-field select,
+.settings-text {
+  width: 100%;
+  border: 1px solid var(--ph-br-1);
+  border-radius: 8px;
+  background: var(--ph-bg-app);
+  color: var(--ph-fg-1);
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.settings-field select:disabled,
+.settings-text:disabled,
+.settings-number:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .update-progress-track {
   height: 8px;
   border-radius: 999px;

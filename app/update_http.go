@@ -6,5 +6,5 @@ import (
 )
 
 func newUpdateHTTPClient(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout}
+	return newHTTPClientWithGlobalProxy(timeout)
 }

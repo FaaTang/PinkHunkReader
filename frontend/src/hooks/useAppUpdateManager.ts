@@ -184,7 +184,7 @@ export function useAppUpdateManager(opts?: {
       const res = (await DownloadUpdate()) as QueryResult
       if (!res?.success) {
         setError(res?.message || 'Download failed')
-        setProgress((p) => ({ ...p, status: 'error', message: res?.message || 'Download failed' }))
+        setProgress((p) => ({ ...p, open: true, status: 'error', message: res?.message || 'Download failed' }))
         return
       }
       const data = (res.data || {}) as { downloadPath?: string; info?: UpdateInfo }
@@ -203,7 +203,7 @@ export function useAppUpdateManager(opts?: {
       })
     } catch (e) {
       setError(String(e))
-      setProgress((p) => ({ ...p, status: 'error', message: String(e) }))
+      setProgress((p) => ({ ...p, open: true, status: 'error', message: String(e) }))
     } finally {
       downloadInFlight.current = false
       setBusy(false)
@@ -269,15 +269,20 @@ export function useAppUpdateManager(opts?: {
       total?: number
       message?: string
     }) => {
-      setProgress((prev) => ({
-        ...prev,
-        open: true,
-        status: (payload?.status as DownloadProgress['status']) || prev.status,
-        percent: typeof payload?.percent === 'number' ? payload.percent : prev.percent,
-        downloaded: typeof payload?.downloaded === 'number' ? payload.downloaded : prev.downloaded,
-        total: typeof payload?.total === 'number' && payload.total > 0 ? payload.total : prev.total,
-        message: payload?.message || '',
-      }))
+      setProgress((prev) => {
+        const status = (payload?.status as DownloadProgress['status']) || prev.status
+        const forceOpen = status === 'done' || status === 'error'
+        return {
+          ...prev,
+          // Respect Hide while downloading; reopen only for terminal states.
+          open: forceOpen ? true : prev.open,
+          status,
+          percent: typeof payload?.percent === 'number' ? payload.percent : prev.percent,
+          downloaded: typeof payload?.downloaded === 'number' ? payload.downloaded : prev.downloaded,
+          total: typeof payload?.total === 'number' && payload.total > 0 ? payload.total : prev.total,
+          message: payload?.message || prev.message,
+        }
+      })
     })
   }, [])
 

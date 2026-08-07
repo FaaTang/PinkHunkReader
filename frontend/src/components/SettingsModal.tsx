@@ -8,6 +8,7 @@ import {
 } from '../settings/shortcuts'
 import { MAX_RECENT_MAX, MIN_RECENT_MAX } from '../settings/recentFiles'
 import type { useAppUpdateManager } from '../hooks/useAppUpdateManager'
+import { GetGlobalProxyConfig, SaveGlobalProxy } from '../../wailsjs/go/app/App'
 import './GoToDialog.css'
 import './SettingsModal.css'
 
@@ -25,6 +26,11 @@ const NAV: { id: SettingsSection; title: string; description: string }[] = [
     description: 'Recent files and other preferences',
   },
   {
+    id: 'proxy',
+    title: 'Proxy',
+    description: 'HTTP / SOCKS5 for updates',
+  },
+  {
     id: 'about',
     title: 'About',
     description: 'Version and software updates',
@@ -32,6 +38,24 @@ const NAV: { id: SettingsSection; title: string; description: string }[] = [
 ]
 
 type UpdateManager = ReturnType<typeof useAppUpdateManager>
+
+type ProxyDraft = {
+  enabled: boolean
+  type: 'http' | 'socks5'
+  host: string
+  port: string
+  user: string
+  password: string
+}
+
+const emptyProxyDraft = (): ProxyDraft => ({
+  enabled: false,
+  type: 'socks5',
+  host: '127.0.0.1',
+  port: '1080',
+  user: '',
+  password: '',
+})
 
 interface Props {
   update?: UpdateManager
@@ -53,6 +77,10 @@ export function SettingsModal({ update }: Props) {
   } = useAppSettings()
   const [capturing, setCapturing] = useState<ShortcutId | null>(null)
   const [recentDraft, setRecentDraft] = useState(String(recentMax))
+  const [proxyDraft, setProxyDraft] = useState<ProxyDraft>(emptyProxyDraft)
+  const [proxyBusy, setProxyBusy] = useState(false)
+  const [proxyError, setProxyError] = useState('')
+  const [proxyStatus, setProxyStatus] = useState('')
 
   useEffect(() => {
     if (!settingsOpen) setCapturing(null)
@@ -67,6 +95,41 @@ export function SettingsModal({ update }: Props) {
       void update?.refreshAppInfo()
     }
   }, [settingsOpen, settingsSection, update])
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== 'proxy') return
+    let cancelled = false
+    void (async () => {
+      setProxyError('')
+      setProxyStatus('')
+      try {
+        const res = await GetGlobalProxyConfig() as {
+          success?: boolean
+          message?: string
+          data?: Partial<ProxyDraft> & { port?: number; type?: string }
+        }
+        if (cancelled) return
+        if (!res?.success || !res.data) {
+          setProxyError(res?.message || 'Failed to load proxy settings')
+          return
+        }
+        const type = String(res.data.type || 'socks5').toLowerCase() === 'http' ? 'http' : 'socks5'
+        setProxyDraft({
+          enabled: Boolean(res.data.enabled),
+          type,
+          host: String(res.data.host || '127.0.0.1'),
+          port: String(res.data.port || (type === 'http' ? 8080 : 1080)),
+          user: String(res.data.user || ''),
+          password: String(res.data.password || ''),
+        })
+      } catch (e) {
+        if (!cancelled) setProxyError(String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [settingsOpen, settingsSection])
 
   useEffect(() => {
     if (!capturing) return
@@ -95,6 +158,45 @@ export function SettingsModal({ update }: Props) {
       return
     }
     setRecentMax(n)
+  }
+
+  const saveProxy = async () => {
+    setProxyBusy(true)
+    setProxyError('')
+    setProxyStatus('')
+    try {
+      const port = Math.floor(Number(proxyDraft.port))
+      const res = await SaveGlobalProxy({
+        enabled: proxyDraft.enabled,
+        type: proxyDraft.type,
+        host: proxyDraft.host.trim(),
+        port: Number.isFinite(port) ? port : (proxyDraft.type === 'http' ? 8080 : 1080),
+        user: proxyDraft.user.trim(),
+        password: proxyDraft.password,
+      }) as { success?: boolean; message?: string; data?: Partial<ProxyDraft> & { port?: number; type?: string } }
+      if (!res?.success) {
+        setProxyError(res?.message || 'Failed to save proxy settings')
+        return
+      }
+      if (res.data) {
+        const type = String(res.data.type || proxyDraft.type).toLowerCase() === 'http' ? 'http' : 'socks5'
+        setProxyDraft({
+          enabled: Boolean(res.data.enabled),
+          type,
+          host: String(res.data.host || ''),
+          port: String(res.data.port || (type === 'http' ? 8080 : 1080)),
+          user: String(res.data.user || ''),
+          password: String(res.data.password || ''),
+        })
+      }
+      setProxyStatus(proxyDraft.enabled
+        ? 'Proxy enabled for update downloads'
+        : 'Proxy disabled · system proxy (if any) still applies')
+    } catch (e) {
+      setProxyError(String(e))
+    } finally {
+      setProxyBusy(false)
+    }
   }
 
   return (
@@ -218,6 +320,106 @@ export function SettingsModal({ update }: Props) {
               </>
             ) : null}
 
+            {settingsSection === 'proxy' ? (
+              <>
+                <div className="settings-section-head">
+                  <div className="settings-section-title">Proxy</div>
+                  <div className="settings-section-desc">
+                    Used for GitHub update checks and downloads. When disabled, system proxy env vars still apply.
+                  </div>
+                </div>
+                <div className="settings-list">
+                  <div className="settings-row settings-row-stack">
+                    <label className="settings-check">
+                      <input
+                        type="checkbox"
+                        checked={proxyDraft.enabled}
+                        onChange={(e) => setProxyDraft((p) => ({ ...p, enabled: e.target.checked }))}
+                      />
+                      Enable global proxy
+                    </label>
+                  </div>
+                  <div className={`settings-proxy-grid${proxyDraft.enabled ? '' : ' disabled'}`}>
+                    <label className="settings-field">
+                      <span>Type</span>
+                      <select
+                        value={proxyDraft.type}
+                        disabled={!proxyDraft.enabled}
+                        onChange={(e) => {
+                          const type = e.target.value === 'http' ? 'http' : 'socks5'
+                          setProxyDraft((p) => ({
+                            ...p,
+                            type,
+                            port: p.port || String(type === 'http' ? 8080 : 1080),
+                          }))
+                        }}
+                      >
+                        <option value="socks5">SOCKS5</option>
+                        <option value="http">HTTP</option>
+                      </select>
+                    </label>
+                    <label className="settings-field">
+                      <span>Port</span>
+                      <input
+                        className="settings-number"
+                        type="number"
+                        min={1}
+                        max={65535}
+                        disabled={!proxyDraft.enabled}
+                        value={proxyDraft.port}
+                        onChange={(e) => setProxyDraft((p) => ({ ...p, port: e.target.value.replace(/[^\d]/g, '') }))}
+                      />
+                    </label>
+                    <label className="settings-field settings-field-span">
+                      <span>Host</span>
+                      <input
+                        className="settings-text"
+                        disabled={!proxyDraft.enabled}
+                        value={proxyDraft.host}
+                        placeholder="127.0.0.1"
+                        onChange={(e) => setProxyDraft((p) => ({ ...p, host: e.target.value }))}
+                      />
+                    </label>
+                    <label className="settings-field">
+                      <span>Username</span>
+                      <input
+                        className="settings-text"
+                        disabled={!proxyDraft.enabled}
+                        value={proxyDraft.user}
+                        onChange={(e) => setProxyDraft((p) => ({ ...p, user: e.target.value }))}
+                      />
+                    </label>
+                    <label className="settings-field">
+                      <span>Password</span>
+                      <input
+                        className="settings-text"
+                        type="password"
+                        disabled={!proxyDraft.enabled}
+                        value={proxyDraft.password}
+                        onChange={(e) => setProxyDraft((p) => ({ ...p, password: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  {proxyError ? <div className="settings-error">{proxyError}</div> : null}
+                  {proxyStatus ? <p className="settings-hint">{proxyStatus}</p> : null}
+                </div>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="toolbar-btn primary"
+                    disabled={proxyBusy}
+                    onClick={() => void saveProxy()}
+                  >
+                    {proxyBusy ? 'Saving…' : 'Save proxy'}
+                  </button>
+                  <span style={{ flex: 1 }} />
+                  <button type="button" className="toolbar-btn" onClick={closeSettings}>
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : null}
+
             {settingsSection === 'about' ? (
               <>
                 <div className="settings-section-head">
@@ -300,19 +502,15 @@ export function SettingsModal({ update }: Props) {
                       <button
                         type="button"
                         className="toolbar-btn"
+                        disabled={update.busy}
                         onClick={() => void update.openDownloadedPackage()}
                       >
-                        Show package
+                        Open package
                       </button>
                     </>
                   ) : null}
-                  {update?.lastUpdate?.hasUpdate ? (
-                    <button type="button" className="toolbar-btn" onClick={() => update.skipThisVersion()}>
-                      Skip this version
-                    </button>
-                  ) : null}
                   <span style={{ flex: 1 }} />
-                  <button type="button" className="toolbar-btn primary" onClick={closeSettings}>
+                  <button type="button" className="toolbar-btn" onClick={closeSettings}>
                     Done
                   </button>
                 </div>

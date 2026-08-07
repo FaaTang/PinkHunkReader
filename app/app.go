@@ -30,6 +30,7 @@ func NewApp() *App {
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.loadPersistedGlobalProxy()
 }
 
 // BeforeClose is called when the user tries to close the window.

@@ -16,6 +16,8 @@ export function DownloadUpdate():Promise<define.QueryResult>;
 
 export function GetAppInfo():Promise<define.QueryResult>;
 
+export function GetGlobalProxyConfig():Promise<define.QueryResult>;
+
 export function GetRoot():Promise<string>;
 
 export function InstallUpdateAndRestart():Promise<define.QueryResult>;
@@ -43,6 +45,8 @@ export function ReadMarkdownOutline(arg1:string):Promise<Array<define.MdHeading>
 export function ReadSlice(arg1:string,arg2:number,arg3:number):Promise<define.TextSlice>;
 
 export function ReadText(arg1:string):Promise<string>;
+
+export function SaveGlobalProxy(arg1:{enabled:boolean;type:string;host:string;port:number;user:string;password:string}):Promise<define.QueryResult>;
 
 export function StatFile(arg1:string):Promise<define.FileInfo>;
 
