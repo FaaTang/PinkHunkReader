@@ -1,11 +1,13 @@
 name: Release
 
-# 仅在向配置分支上的提交推送 v* tag 时发布（避免同步上游 tag 时误触发）
-# 可在仓库 Settings → Secrets and variables → Actions → Variables 设置 RELEASE_BRANCH（默认 main）
+# Trigger: git push of v* tags, creating a v* tag in the GitHub UI, or manual run.
+# Optional repo variable RELEASE_BRANCH (default main) — tag commit must be on that branch.
 on:
   push:
     tags:
       - 'v*'
+  create:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,6 +19,11 @@ jobs:
   gate:
     name: Verify release trigger
     runs-on: ubuntu-latest
+    # UI "Create tag" fires `create` (not `push`); ignore branch creates.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'create' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v'))
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
@@ -32,11 +39,18 @@ jobs:
           RELEASE_BRANCH: ${{ env.RELEASE_BRANCH }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          REF_NAME="${GITHUB_REF_NAME}"
+          if [[ "$REF_NAME" != v* ]]; then
+            echo "Ref ${REF_NAME} is not a v* tag; skip release"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION="${REF_NAME#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].+)?$ ]]; then
-            echo "Tag ${GITHUB_REF_NAME} is not a semver-like version; skip release"
+            echo "Tag ${REF_NAME} is not a semver-like version; skip release"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
