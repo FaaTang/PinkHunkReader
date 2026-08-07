@@ -7,6 +7,8 @@ import { FileTree } from './components/FileTree'
 import { GoToDialog } from './components/GoToDialog'
 import { OpenMenu } from './components/OpenMenu'
 import { SettingsModal } from './components/SettingsModal'
+import { UpdateProgressDialog } from './components/UpdateProgressDialog'
+import { useAppUpdateManager } from './hooks/useAppUpdateManager'
 import { TabBar } from './components/TabBar'
 import { ViewerHost } from './components/ViewerHost'
 import { useAppFullscreen } from './hooks/useAppFullscreen'
@@ -80,6 +82,10 @@ function AppShell() {
     rememberRecent,
   } = useAppSettings()
 
+  const update = useAppUpdateManager({
+    onPromptUpdate: () => openSettings('about'),
+  })
+
   const activeTab = useMemo(
     () => tabs.find((t) => t.path === activePath) ?? null,
     [tabs, activePath],
@@ -115,8 +121,9 @@ function AppShell() {
 
       let content = ''
 
-      if (info.kind === 'pdf' || info.kind === 'image') {
+      if (info.kind === 'pdf' || info.kind === 'image' || info.kind === 'word' || info.kind === 'excel') {
         // filled by viewer via ReadBytes
+        setStatus(`${info.name} · ${(info.size / 1024).toFixed(1)} KB`)
       } else if (info.largeMode) {
         setStatus(`${info.name} · paged (viewport × 2)`)
       } else if (info.editable || info.kind === 'markdown' || info.kind === 'text') {
@@ -188,7 +195,7 @@ function AppShell() {
             })
             continue
           }
-          if (st.largeMode || st.kind === 'pdf' || st.kind === 'image') {
+          if (st.largeMode || st.kind === 'pdf' || st.kind === 'image' || st.kind === 'word' || st.kind === 'excel') {
             try {
               if (session.root) {
                 const info = await StatFile(st.path)
@@ -539,6 +546,13 @@ function AppShell() {
         return
       }
 
+      if (eventMatchesShortcut(e, shortcuts.settings)) {
+        if (typing && !(e.ctrlKey || e.metaKey)) return
+        e.preventDefault()
+        e.stopPropagation()
+        openSettings()
+        return
+      }
       if (eventMatchesShortcut(e, shortcuts.open)) {
         if (typing && !(e.ctrlKey || e.metaKey)) return
         e.preventDefault()
@@ -551,6 +565,14 @@ function AppShell() {
         e.preventDefault()
         e.stopPropagation()
         newFile()
+        return
+      }
+      if (eventMatchesShortcut(e, shortcuts.closeTab)) {
+        if (typing && !(e.ctrlKey || e.metaKey)) return
+        if (!activePathRef.current) return
+        e.preventDefault()
+        e.stopPropagation()
+        void closeTab(activePathRef.current)
         return
       }
       if (eventMatchesShortcut(e, shortcuts.save)) {
@@ -593,8 +615,10 @@ function AppShell() {
     saveActive,
     openPicked,
     newFile,
+    closeTab,
     formatActiveJson,
     openGoTo,
+    openSettings,
     toggleFullscreen,
     exitFullscreen,
     fullscreen,
@@ -652,7 +676,7 @@ function AppShell() {
           type="button"
           className="toolbar-btn"
           onClick={() => openSettings()}
-          title="Settings"
+          title={`Settings (${formatShortcut(shortcuts.settings)})`}
         >
           Settings
         </button>
@@ -679,6 +703,7 @@ function AppShell() {
             <FileTree
               root={root}
               refreshToken={treeRefresh}
+              activePath={activePath}
               onOpenFile={(p) => void openFile(p)}
             />
           ) : (
@@ -750,8 +775,21 @@ function AppShell() {
         remaining={closePrompt?.remaining ?? 0}
         onChoice={handleClosePrompt}
       />
+      <SettingsModal update={update} />
+      <UpdateProgressDialog
+        open={update.progress.open}
+        version={update.progress.version}
+        status={update.progress.status}
+        percent={update.progress.percent}
+        downloaded={update.progress.downloaded}
+        total={update.progress.total}
+        message={update.progress.message}
+        formatBytes={update.formatBytes}
+        canInstall={update.canInstall}
+        onHide={update.hideProgress}
+        onInstall={() => void update.installUpdate()}
+      />
       <GoToDialog />
-      <SettingsModal />
     </div>
   )
 }

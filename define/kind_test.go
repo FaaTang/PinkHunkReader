@@ -17,8 +17,9 @@ func TestDetectKind(t *testing.T) {
 		"run.out":    define.KindText,
 		"data.jsonc": define.KindText,
 		"e.bin":      define.KindUnknown,
-		"report.docx": define.KindUnknown,
-		"sheet.xlsx":  define.KindUnknown,
+		"report.docx": define.KindWord,
+		"sheet.xlsx":  define.KindExcel,
+		"legacy.xls":  define.KindExcel,
 		"Makefile":   define.KindText,
 		"readme":     define.KindText,
 	}

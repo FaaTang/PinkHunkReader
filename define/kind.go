@@ -40,11 +40,14 @@ var textExt = map[string]struct{}{
 	".lock": {}, // package-lock / yarn.lock / Cargo.lock (text)
 }
 
-// officeExt: Word / Excel — read-only preview later (not Monaco-edit).
-var officeExt = map[string]struct{}{
+// wordExt: Word — read-only preview (docx; legacy .doc may fail in viewer).
+var wordExt = map[string]struct{}{
 	".docx": {}, ".doc": {},
+}
+
+// excelExt: Excel — read-only preview.
+var excelExt = map[string]struct{}{
 	".xlsx": {}, ".xls": {},
-	".pptx": {}, ".ppt": {},
 }
 
 // DetectKind returns the viewer kind for a file path.
@@ -66,9 +69,11 @@ func DetectKind(path string) string {
 	if _, ok := imageExt[ext]; ok {
 		return KindImage
 	}
-	if _, ok := officeExt[ext]; ok {
-		// Until dedicated readers land, treat as unknown (not editable text).
-		return KindUnknown
+	if _, ok := wordExt[ext]; ok {
+		return KindWord
+	}
+	if _, ok := excelExt[ext]; ok {
+		return KindExcel
 	}
 	if _, ok := textExt[ext]; ok {
 		return KindText

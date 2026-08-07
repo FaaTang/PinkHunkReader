@@ -6,6 +6,7 @@ import './FileTree.css'
 interface Props {
   root: string
   refreshToken?: number
+  activePath?: string | null
   onOpenFile: (path: string) => void
 }
 
@@ -15,10 +16,15 @@ interface TreeNode {
   children?: TreeNode[]
 }
 
-export function FileTree({ root, refreshToken = 0, onOpenFile }: Props) {
+function pathsEqual(a: string, b: string): boolean {
+  if (!a || !b) return false
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  return norm(a) === norm(b)
+}
+
+export function FileTree({ root, refreshToken = 0, activePath = null, onOpenFile }: Props) {
   const [nodes, setNodes] = useState<TreeNode[]>([])
   const [error, setError] = useState('')
-  const [active, setActive] = useState('')
 
   const loadRoot = useCallback(async (keepExpanded: TreeNode[] | null) => {
     setError('')
@@ -59,12 +65,9 @@ export function FileTree({ root, refreshToken = 0, onOpenFile }: Props) {
       <TreeList
         nodes={nodes}
         depth={0}
-        active={active}
+        activePath={activePath}
         onToggle={(p) => void toggle(p)}
-        onOpen={(p) => {
-          setActive(p)
-          onOpenFile(p)
-        }}
+        onOpen={onOpenFile}
       />
     </div>
   )
@@ -118,13 +121,13 @@ async function togglePath(list: TreeNode[], path: string): Promise<TreeNode[]> {
 function TreeList({
   nodes,
   depth,
-  active,
+  activePath,
   onToggle,
   onOpen,
 }: {
   nodes: TreeNode[]
   depth: number
-  active: string
+  activePath: string | null
   onToggle: (path: string) => void
   onOpen: (path: string) => void
 }) {
@@ -133,7 +136,7 @@ function TreeList({
       {nodes.map((n) => (
         <div key={n.entry.path}>
           <div
-            className={`tree-row ${active === n.entry.path ? 'active' : ''}`}
+            className={`tree-row ${pathsEqual(activePath ?? '', n.entry.path) ? 'active' : ''}`}
             style={{ ['--depth' as string]: depth }}
             onClick={() => {
               if (n.entry.isDir) onToggle(n.entry.path)
@@ -149,7 +152,7 @@ function TreeList({
             <TreeList
               nodes={n.children}
               depth={depth + 1}
-              active={active}
+              activePath={activePath}
               onToggle={onToggle}
               onOpen={onOpen}
             />
@@ -168,6 +171,10 @@ function kindIcon(kind: string): string {
       return 'P'
     case 'image':
       return 'I'
+    case 'word':
+      return 'W'
+    case 'excel':
+      return 'X'
     default:
       return '·'
   }

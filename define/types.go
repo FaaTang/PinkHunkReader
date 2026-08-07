@@ -6,6 +6,8 @@ const (
 	KindText      = "text"
 	KindPDF       = "pdf"
 	KindImage     = "image"
+	KindWord      = "word"
+	KindExcel     = "excel"
 	KindUnknown   = "unknown"
 	KindDirectory = "directory"
 )

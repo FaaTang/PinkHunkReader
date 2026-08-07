@@ -214,7 +214,7 @@ jobs:
           GOFLAGS: -mod=readonly
         run: |
           set -euo pipefail
-          wails build -s -skipbindings -platform ${{ matrix.platform }} -clean -o ${{ matrix.build_name }} -ldflags "-s -w"
+          wails build -s -skipbindings -platform ${{ matrix.platform }} -clean -o ${{ matrix.build_name }} -ldflags "-s -w -X github.com/FaaTang/PinkHunkReader/app.AppVersion=${{ needs.gate.outputs.version }}"
 
       - name: Package Windows EXE
         if: startsWith(matrix.platform, 'windows/')

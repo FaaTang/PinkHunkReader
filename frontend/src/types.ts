@@ -1,4 +1,4 @@
-export type FileKind = 'markdown' | 'text' | 'pdf' | 'image' | 'unknown' | 'directory'
+export type FileKind = 'markdown' | 'text' | 'pdf' | 'image' | 'word' | 'excel' | 'unknown' | 'directory'
 
 export interface DirEntry {
   name: string

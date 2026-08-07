@@ -10,14 +10,15 @@ export function isApplePlatform(): boolean {
     (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform
     || navigator.platform
     || ''
-  return /Mac|iPhone|iPad|iPod/i.test(plat) || /Mac OS X/i.test(ua)
+  return /Mac|iPhone|iPad|iPod/i.test(plat) || /Mac OS X|Macintosh/i.test(ua)
 }
 
-function platformFromRuntime(raw: string): AppPlatform {
-  const p = raw.toLowerCase()
-  if (p === 'darwin') return 'mac'
-  if (p === 'windows') return 'windows'
-  if (p === 'linux') return 'linux'
+function platformFromRuntime(raw: string | undefined | null): AppPlatform {
+  const p = (raw || '').toLowerCase().trim()
+  if (!p) return 'unknown'
+  if (p === 'darwin' || p === 'macos' || p === 'mac' || p.startsWith('darwin')) return 'mac'
+  if (p === 'windows' || p.startsWith('windows')) return 'windows'
+  if (p === 'linux' || p.startsWith('linux')) return 'linux'
   return 'unknown'
 }
 
@@ -40,8 +41,12 @@ export async function initPlatformChrome(): Promise<AppPlatform> {
   applyPlatformClass(platform)
   try {
     const env = await Environment()
-    platform = platformFromRuntime(env.platform)
-    applyPlatformClass(platform)
+    const fromRuntime = platformFromRuntime(env?.platform)
+    // Never wipe a solid navigator mac guess with "unknown".
+    if (fromRuntime !== 'unknown') {
+      platform = fromRuntime
+      applyPlatformClass(platform)
+    }
   } catch {
     // Dev without Wails runtime — keep navigator guess.
   }

@@ -16,10 +16,12 @@
   border-bottom: 1px solid var(--ph-br-1);
 }
 
-/* macOS: native traffic lights top-left; leave inset + make chrome draggable. */
+/* macOS: native traffic lights top-left; leave inset + make chrome draggable.
+ * TitleBarHiddenInset draws content under the titlebar — keep clear of the lights
+ * (close / minimize / zoom end ~70–80px; use 100px for safe gap on scaled displays). */
 html.platform-mac .toolbar {
   height: 52px;
-  padding-left: 78px;
+  padding-left: 100px;
   --wails-draggable: drag;
 }
 
