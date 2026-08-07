@@ -26,7 +26,7 @@ export interface GoToTarget {
   go: (n: number) => void | Promise<void>
 }
 
-export type SettingsSection = 'shortcuts' | 'general' | 'about'
+export type SettingsSection = 'shortcuts' | 'general' | 'proxy' | 'about'
 
 interface AppSettingsValue {
   shortcuts: ShortcutMap

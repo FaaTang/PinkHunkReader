@@ -30,6 +30,10 @@ export function GetAppInfo() {
   return window['go']['app']['App']['GetAppInfo']();
 }
 
+export function GetGlobalProxyConfig() {
+  return window['go']['app']['App']['GetGlobalProxyConfig']();
+}
+
 export function GetRoot() {
   return window['go']['app']['App']['GetRoot']();
 }
@@ -84,6 +88,10 @@ export function ReadSlice(arg1, arg2, arg3) {
 
 export function ReadText(arg1) {
   return window['go']['app']['App']['ReadText'](arg1);
+}
+
+export function SaveGlobalProxy(arg1) {
+  return window['go']['app']['App']['SaveGlobalProxy'](arg1);
 }
 
 export function StatFile(arg1) {
