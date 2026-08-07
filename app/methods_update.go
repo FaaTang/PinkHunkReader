@@ -1,4 +1,4 @@
-package app
+﻿package app
 
 import (
 	"crypto/sha256"
@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	urlpkg "net/url"
@@ -17,14 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"GoNavi-Wails/internal/connection"
-	"GoNavi-Wails/internal/logger"
-
+	"github.com/FaaTang/PinkHunkReader/define"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
-	updateRepo                  = "FaaTang/PinkHunkDB"
+	updateRepo                  = "FaaTang/PinkHunkReader"
 	updateAPIURL                = "https://api.github.com/repos/" + updateRepo + "/releases/latest"
 	updateChecksumAsset         = "SHA256SUMS"
 	updateDownloadProgressEvent = "update:download-progress"
@@ -33,7 +32,7 @@ const (
 var (
 	updateFetchLatestRelease = fetchLatestRelease
 	updateFetchReleaseSHA256 = fetchReleaseSHA256
-	updateLogCheckError      = func(err error) { logger.Error(err, "检查更新失败") }
+	updateLogCheckError      = func(err error) { log.Printf("检查更新失败: %v", err) }
 )
 
 type updateState struct {
@@ -124,7 +123,7 @@ func (a *App) localizedUpdateError(err error) string {
 	}
 	var localized localizedUpdateError
 	if errors.As(err, &localized) {
-		return a.appText(localized.key, localized.params)
+		return updateText(localized.key, localized.params)
 	}
 	return err.Error()
 }
@@ -139,21 +138,21 @@ func (a *App) pruneUpdateArtifacts() {
 	pruneHistoricalUpdateArtifacts(getCurrentVersion(), stagedVersion)
 }
 
-func (a *App) CheckForUpdates() connection.QueryResult {
+func (a *App) CheckForUpdates() define.QueryResult {
 	return a.checkForUpdates(true)
 }
 
-func (a *App) CheckForUpdatesSilently() connection.QueryResult {
+func (a *App) CheckForUpdatesSilently() define.QueryResult {
 	return a.checkForUpdates(false)
 }
 
-func (a *App) checkForUpdates(logFailure bool) connection.QueryResult {
+func (a *App) checkForUpdates(logFailure bool) define.QueryResult {
 	info, err := fetchLatestUpdateInfo()
 	if err != nil {
 		if logFailure {
 			updateLogCheckError(err)
 		}
-		return connection.QueryResult{Success: false, Message: a.localizedUpdateError(err)}
+		return define.QueryResult{Success: false, Message: a.localizedUpdateError(err)}
 	}
 
 	var currentStaged *stagedUpdate
@@ -181,50 +180,50 @@ func (a *App) checkForUpdates(logFailure bool) connection.QueryResult {
 
 	go a.pruneUpdateArtifacts()
 
-	msg := a.appText("app.update.backend.message.latest", nil)
+	msg := updateText("app.update.backend.message.latest", nil)
 	if info.HasUpdate {
-		msg = a.appText("app.update.backend.message.update_found", map[string]any{"version": info.LatestVersion})
+		msg = updateText("app.update.backend.message.update_found", map[string]any{"version": info.LatestVersion})
 	}
-	return connection.QueryResult{Success: true, Message: msg, Data: info}
+	return define.QueryResult{Success: true, Message: msg, Data: info}
 }
 
-func (a *App) GetAppInfo() connection.QueryResult {
+func (a *App) GetAppInfo() define.QueryResult {
 	info := AppInfo{
 		Version:      getCurrentVersion(),
 		Author:       getCurrentAuthor(),
 		RepoURL:      "https://github.com/" + updateRepo,
 		IssueURL:     "https://github.com/" + updateRepo + "/issues",
 		ReleaseURL:   "https://github.com/" + updateRepo + "/releases",
-		CommunityURL: "https://aibook.ren",
+		CommunityURL: "",
 		BuildTime:    strings.TrimSpace(AppBuildTime),
 	}
-	return connection.QueryResult{Success: true, Message: "OK", Data: info}
+	return define.QueryResult{Success: true, Message: "OK", Data: info}
 }
 
-func (a *App) DownloadUpdate() connection.QueryResult {
+func (a *App) DownloadUpdate() define.QueryResult {
 	a.updateMu.Lock()
 	if a.updateState.downloading {
 		a.updateMu.Unlock()
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.download_in_progress", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.download_in_progress", nil)}
 	}
 	info := a.updateState.lastCheck
 	if info == nil {
 		a.updateMu.Unlock()
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.check_first", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.check_first", nil)}
 	}
 	if !info.HasUpdate {
 		a.updateMu.Unlock()
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.latest", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.latest", nil)}
 	}
 	if info.AssetURL == "" || info.AssetName == "" {
 		a.updateMu.Unlock()
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.no_update_package", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.no_update_package", nil)}
 	}
 	staged := resolveReusableStagedUpdate(*info, a.updateState.staged)
 	if staged != nil {
 		a.updateState.staged = staged
 		a.updateMu.Unlock()
-		return connection.QueryResult{Success: true, Message: a.appText("app.update.backend.message.package_already_downloaded", nil), Data: buildUpdateDownloadResult(*info, staged)}
+		return define.QueryResult{Success: true, Message: updateText("app.update.backend.message.package_already_downloaded", nil), Data: buildUpdateDownloadResult(*info, staged)}
 	}
 	a.updateState.staged = nil
 	a.updateState.downloading = true
@@ -240,7 +239,7 @@ func (a *App) DownloadUpdate() connection.QueryResult {
 	return result
 }
 
-func (a *App) InstallUpdateAndRestart() connection.QueryResult {
+func (a *App) InstallUpdateAndRestart() define.QueryResult {
 	a.updateMu.Lock()
 	staged := a.updateState.staged
 	if staged != nil && strings.TrimSpace(staged.InstallLogPath) == "" {
@@ -248,20 +247,20 @@ func (a *App) InstallUpdateAndRestart() connection.QueryResult {
 	}
 	a.updateMu.Unlock()
 	if staged == nil {
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.no_downloaded_package", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.no_downloaded_package", nil)}
 	}
 
 	if err := launchUpdateScript(staged); err != nil {
-		logger.Error(err, "启动更新脚本失败")
+		log.Printf("启动更新脚本失败: %v", err)
 		detail := a.localizedUpdateError(err)
-		msg := a.appText("app.update.backend.message.install_launch_failed", map[string]any{"detail": detail})
+		msg := updateText("app.update.backend.message.install_launch_failed", map[string]any{"detail": detail})
 		if staged.InstallLogPath != "" {
-			msg = a.appText("app.update.backend.message.install_launch_failed_with_log", map[string]any{
+			msg = updateText("app.update.backend.message.install_launch_failed_with_log", map[string]any{
 				"detail": detail,
 				"path":   staged.InstallLogPath,
 			})
 		}
-		return connection.QueryResult{
+		return define.QueryResult{
 			Success: false,
 			Message: msg,
 			Data: map[string]any{
@@ -275,11 +274,11 @@ func (a *App) InstallUpdateAndRestart() connection.QueryResult {
 		wailsRuntime.Quit(a.ctx)
 	}()
 
-	msg := a.appText("app.update.backend.message.install_started", nil)
+	msg := updateText("app.update.backend.message.install_started", nil)
 	if staged.InstallLogPath != "" {
-		msg = a.appText("app.update.backend.message.install_started_with_log", map[string]any{"path": staged.InstallLogPath})
+		msg = updateText("app.update.backend.message.install_started_with_log", map[string]any{"path": staged.InstallLogPath})
 	}
-	return connection.QueryResult{
+	return define.QueryResult{
 		Success: true,
 		Message: msg,
 		Data: map[string]any{
@@ -288,32 +287,32 @@ func (a *App) InstallUpdateAndRestart() connection.QueryResult {
 	}
 }
 
-func (a *App) OpenDownloadedUpdateDirectory() connection.QueryResult {
+func (a *App) OpenDownloadedUpdateDirectory() define.QueryResult {
 	return a.openDownloadedUpdatePackage(false)
 }
 
-func (a *App) OpenDownloadedUpdatePackage() connection.QueryResult {
+func (a *App) OpenDownloadedUpdatePackage() define.QueryResult {
 	return a.openDownloadedUpdatePackage(true)
 }
 
-func (a *App) openDownloadedUpdatePackage(revealFile bool) connection.QueryResult {
+func (a *App) openDownloadedUpdatePackage(revealFile bool) define.QueryResult {
 	a.updateMu.Lock()
 	staged := a.updateState.staged
 	a.updateMu.Unlock()
 	if staged == nil {
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.no_downloaded_package", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.no_downloaded_package", nil)}
 	}
 	assetPath := strings.TrimSpace(staged.FilePath)
 	if assetPath == "" {
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.package_path_empty", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.package_path_empty", nil)}
 	}
 	if stat, err := os.Stat(assetPath); err != nil || stat.IsDir() {
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.package_directory_unavailable", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.package_directory_unavailable", nil)}
 	}
 
 	dirPath := strings.TrimSpace(filepath.Dir(assetPath))
 	if dirPath == "" || dirPath == "." {
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.package_directory_unresolved", nil)}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.package_directory_unresolved", nil)}
 	}
 
 	var cmd *exec.Cmd
@@ -333,36 +332,36 @@ func (a *App) openDownloadedUpdatePackage(revealFile bool) connection.QueryResul
 	case "linux":
 		cmd = exec.Command("xdg-open", dirPath)
 	default:
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.open_directory_unsupported", map[string]any{"platform": stdRuntime.GOOS})}
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.open_directory_unsupported", map[string]any{"platform": stdRuntime.GOOS})}
 	}
 	if err := cmd.Start(); err != nil {
-		logger.Error(err, "打开更新包路径失败")
-		return connection.QueryResult{Success: false, Message: a.appText("app.update.backend.message.open_directory_failed", map[string]any{"detail": err.Error()})}
+		log.Printf("打开更新包路径失败: %v", err)
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.open_directory_failed", map[string]any{"detail": err.Error()})}
 	}
-	return connection.QueryResult{
+	return define.QueryResult{
 		Success: true,
-		Message: a.appText("app.update.backend.message.opened_install_directory", map[string]any{"path": assetPath}),
+		Message: updateText("app.update.backend.message.opened_install_directory", map[string]any{"path": assetPath}),
 		Data: map[string]any{
 			"path": assetPath,
 		},
 	}
 }
 
-func (a *App) downloadAndStageUpdate(info UpdateInfo) connection.QueryResult {
+func (a *App) downloadAndStageUpdate(info UpdateInfo) define.QueryResult {
 	workspaceDir := strings.TrimSpace(resolveUpdateWorkspaceDir(info.LatestVersion))
 	if workspaceDir == "" {
-		message := a.appText("app.update.backend.message.app_directory_unresolved_download", nil)
+		message := updateText("app.update.backend.message.app_directory_unresolved_download", nil)
 		a.emitUpdateDownloadProgress("error", 0, info.AssetSize, message)
-		return connection.QueryResult{Success: false, Message: message}
+		return define.QueryResult{Success: false, Message: message}
 	}
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
-		errMsg := a.appText("app.update.backend.message.app_directory_unavailable", map[string]any{"path": workspaceDir})
+		errMsg := updateText("app.update.backend.message.app_directory_unavailable", map[string]any{"path": workspaceDir})
 		a.emitUpdateDownloadProgress("error", 0, info.AssetSize, errMsg)
-		return connection.QueryResult{Success: false, Message: errMsg}
+		return define.QueryResult{Success: false, Message: errMsg}
 	}
 
 	// 使用版本号命名的工作目录，便于识别和调试
-	stagedDir := filepath.Join(workspaceDir, fmt.Sprintf(".PinkHunkDB-update-%s-%s", stdRuntime.GOOS, info.LatestVersion))
+	stagedDir := filepath.Join(workspaceDir, fmt.Sprintf(".PinkHunkReader-update-%s-%s", stdRuntime.GOOS, info.LatestVersion))
 	// 清理可能残留的旧目录（上次下载失败后未清理）
 	// Windows 上文件可能被杀毒软件/索引服务占用，需要重试
 	for retry := 0; retry < 5; retry++ {
@@ -374,13 +373,13 @@ func (a *App) downloadAndStageUpdate(info UpdateInfo) connection.QueryResult {
 			time.Sleep(time.Duration(retry+1) * 500 * time.Millisecond)
 		} else {
 			// 最后一次仍然失败，换一个带时间戳的目录名避免冲突
-			stagedDir = filepath.Join(workspaceDir, fmt.Sprintf(".PinkHunkDB-update-%s-%s-%d", stdRuntime.GOOS, info.LatestVersion, time.Now().UnixNano()))
+			stagedDir = filepath.Join(workspaceDir, fmt.Sprintf(".PinkHunkReader-update-%s-%s-%d", stdRuntime.GOOS, info.LatestVersion, time.Now().UnixNano()))
 		}
 	}
 	if err := os.MkdirAll(stagedDir, 0o755); err != nil {
-		errMsg := a.appText("app.update.backend.message.create_workspace_failed", map[string]any{"path": stagedDir})
+		errMsg := updateText("app.update.backend.message.create_workspace_failed", map[string]any{"path": stagedDir})
 		a.emitUpdateDownloadProgress("error", 0, info.AssetSize, errMsg)
-		return connection.QueryResult{Success: false, Message: errMsg}
+		return define.QueryResult{Success: false, Message: errMsg}
 	}
 
 	// macOS 下载包放在桌面版本目录根级；其他平台继续放在 staging 目录。
@@ -397,22 +396,22 @@ func (a *App) downloadAndStageUpdate(info UpdateInfo) connection.QueryResult {
 		_ = os.RemoveAll(stagedDir)
 		message := a.localizedUpdateError(err)
 		a.emitUpdateDownloadProgress("error", 0, info.AssetSize, message)
-		return connection.QueryResult{Success: false, Message: message}
+		return define.QueryResult{Success: false, Message: message}
 	}
 
 	if info.SHA256 == "" {
 		_ = os.Remove(assetPath)
 		_ = os.RemoveAll(stagedDir)
-		message := a.appText("app.update.backend.message.checksum_missing", nil)
+		message := updateText("app.update.backend.message.checksum_missing", nil)
 		a.emitUpdateDownloadProgress("error", 0, info.AssetSize, message)
-		return connection.QueryResult{Success: false, Message: message}
+		return define.QueryResult{Success: false, Message: message}
 	}
 	if !strings.EqualFold(info.SHA256, actualHash) {
 		_ = os.Remove(assetPath)
 		_ = os.RemoveAll(stagedDir)
-		message := a.appText("app.update.backend.message.checksum_failed", nil)
+		message := updateText("app.update.backend.message.checksum_failed", nil)
 		a.emitUpdateDownloadProgress("error", 0, info.AssetSize, message)
-		return connection.QueryResult{Success: false, Message: message}
+		return define.QueryResult{Success: false, Message: message}
 	}
 
 	staged := &stagedUpdate{
@@ -431,7 +430,7 @@ func (a *App) downloadAndStageUpdate(info UpdateInfo) connection.QueryResult {
 	go a.pruneUpdateArtifacts()
 
 	a.emitUpdateDownloadProgress("done", info.AssetSize, info.AssetSize, "")
-	return connection.QueryResult{Success: true, Message: a.appText("app.update.backend.message.package_downloaded", nil), Data: buildUpdateDownloadResult(info, staged)}
+	return define.QueryResult{Success: true, Message: updateText("app.update.backend.message.package_downloaded", nil), Data: buildUpdateDownloadResult(info, staged)}
 }
 
 func fetchLatestUpdateInfo() (UpdateInfo, error) {
@@ -519,7 +518,7 @@ func swapUpdateCheckErrorLogger(next func(error)) func() {
 }
 
 func getCurrentAuthor() string {
-	if env := strings.TrimSpace(os.Getenv("GONAVI_AUTHOR")); env != "" {
+	if env := strings.TrimSpace(os.Getenv("PINKHUNK_READER_AUTHOR")); env != "" {
 		return env
 	}
 	parts := strings.Split(updateRepo, "/")
@@ -530,12 +529,12 @@ func getCurrentAuthor() string {
 }
 
 func fetchLatestRelease() (*githubRelease, error) {
-	client := newHTTPClientWithGlobalProxy(15 * time.Second)
+	client := newUpdateHTTPClient(15 * time.Second)
 	req, err := http.NewRequest(http.MethodGet, updateAPIURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "PinkHunkDB-Updater")
+	req.Header.Set("User-Agent", "PinkHunkReader-Updater")
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := client.Do(req)
@@ -582,21 +581,21 @@ func expectedAssetNameForExecutable(goos, goarch, version, executablePath string
 	switch goos {
 	case "windows":
 		if goarch == "amd64" {
-			return fmt.Sprintf("PinkHunkDB-%s-Windows-Amd64.exe", version), nil
+			return fmt.Sprintf("PinkHunkReader-%s-Windows-Amd64.exe", version), nil
 		}
 		if goarch == "arm64" {
-			return fmt.Sprintf("PinkHunkDB-%s-Windows-Arm64.exe", version), nil
+			return fmt.Sprintf("PinkHunkReader-%s-Windows-Arm64.exe", version), nil
 		}
 	case "darwin":
 		if goarch == "amd64" {
-			return fmt.Sprintf("PinkHunkDB-%s-MacOS-Amd64.dmg", version), nil
+			return fmt.Sprintf("PinkHunkReader-%s-MacOS-Amd64.dmg", version), nil
 		}
 		if goarch == "arm64" {
-			return fmt.Sprintf("PinkHunkDB-%s-MacOS-Arm64.dmg", version), nil
+			return fmt.Sprintf("PinkHunkReader-%s-MacOS-Arm64.dmg", version), nil
 		}
 	case "linux":
 		if goarch == "amd64" {
-			return fmt.Sprintf("PinkHunkDB-%s-Linux-Amd64%s.tar.gz", version, resolveLinuxReleaseArtifactSuffix(executablePath)), nil
+			return fmt.Sprintf("PinkHunkReader-%s-Linux-Amd64%s.tar.gz", version, resolveLinuxReleaseArtifactSuffix(executablePath)), nil
 		}
 	}
 	return "", localizedUpdateError{
@@ -643,12 +642,12 @@ func fetchReleaseSHA256(assets []githubAsset) (map[string]string, error) {
 		return nil, localizedUpdateError{key: "app.update.backend.error.sha256sums_missing"}
 	}
 
-	client := newHTTPClientWithGlobalProxy(15 * time.Second)
+	client := newUpdateHTTPClient(15 * time.Second)
 	req, err := http.NewRequest(http.MethodGet, checksumURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "PinkHunkDB-Updater")
+	req.Header.Set("User-Agent", "PinkHunkReader-Updater")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -724,12 +723,12 @@ func downloadFileWithHashWithTimeout(url, filePath string, onProgress func(downl
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
 	}
-	client := newHTTPClientWithGlobalProxy(timeout)
+	client := newUpdateHTTPClient(timeout)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "PinkHunkDB-Updater")
+	req.Header.Set("User-Agent", "PinkHunkReader-Updater")
 	if isGitHubReleaseAssetAPIURL(url) {
 		req.Header.Set("Accept", "application/octet-stream")
 	}
@@ -859,18 +858,18 @@ func sanitizeVersionForPath(version string) string {
 }
 
 var resolveLegacyUpdateWorkspaceDir = func() string {
-	return filepath.Join(os.TempDir(), "PinkHunkDB-updates")
+	return filepath.Join(os.TempDir(), "PinkHunkReader-updates")
 }
 
 func resolveUpdateWorkspaceDir(version string) string {
 	// 默认使用系统临时目录作为更新工作区，避免目录权限与锁冲突。
-	// macOS 用户要求更新包默认保存在桌面：Desktop/PinkHunkDB-<version>/。
+	// macOS 用户要求更新包默认保存在桌面：Desktop/PinkHunkReader-<version>/。
 	if stdRuntime.GOOS == "darwin" {
 		homeDir, err := os.UserHomeDir()
 		if err == nil && strings.TrimSpace(homeDir) != "" {
 			desktopDir := filepath.Join(homeDir, "Desktop")
 			if st, statErr := os.Stat(desktopDir); statErr == nil && st.IsDir() {
-				return filepath.Join(desktopDir, fmt.Sprintf("PinkHunkDB-%s", sanitizeVersionForPath(version)))
+				return filepath.Join(desktopDir, fmt.Sprintf("PinkHunkReader-%s", sanitizeVersionForPath(version)))
 			}
 		}
 	}
@@ -922,7 +921,7 @@ func resolveReusableStagedUpdate(info UpdateInfo, current *stagedUpdate) *staged
 		stagedDir    string
 		assetPath    string
 	}
-	stagedDirName := fmt.Sprintf(".PinkHunkDB-update-%s-%s", stdRuntime.GOOS, version)
+	stagedDirName := fmt.Sprintf(".PinkHunkReader-update-%s-%s", stdRuntime.GOOS, version)
 	workspaceCandidates := []string{
 		resolveUpdateWorkspaceDir(version),
 		resolveLegacyUpdateWorkspaceDir(),
@@ -1053,7 +1052,7 @@ func launchWindowsUpdate(staged *stagedUpdate, targetExe string, pid int) error 
 		return err
 	}
 
-	logger.Infof("启动 Windows 更新脚本：target=%s script=%s log=%s", targetExe, scriptPath, logPath)
+	log.Printf("启动 Windows 更新脚本：target=%s script=%s log=%s", targetExe, scriptPath, logPath)
 	cmd := buildWindowsLaunchCommand(scriptPath)
 	cmd.Env = append(os.Environ(), windowsUpdateScriptEnv(staged.FilePath, targetExe, staged.StagedDir, logPath, pid)...)
 	if err := cmd.Start(); err != nil {
@@ -1061,7 +1060,7 @@ func launchWindowsUpdate(staged *stagedUpdate, targetExe string, pid int) error 
 	}
 	if cmd.Process != nil {
 		if err := cmd.Process.Release(); err != nil {
-			logger.Warnf("释放 Windows 更新脚本进程句柄失败：%v", err)
+			log.Printf("释放 Windows 更新脚本进程句柄失败：%v", err)
 		}
 	}
 	return nil
@@ -1086,7 +1085,7 @@ func launchMacUpdate(staged *stagedUpdate, targetExe string, pid int) error {
 	}
 
 	cmd := exec.Command("/bin/bash", scriptPath)
-	logger.Infof("启动 macOS 更新脚本：target=%s script=%s log=%s", targetApp, scriptPath, logPath)
+	log.Printf("启动 macOS 更新脚本：target=%s script=%s log=%s", targetApp, scriptPath, logPath)
 	return cmd.Start()
 }
 
@@ -1240,7 +1239,7 @@ if [ ! -f "$NEWBIN" ]; then
   NEWBIN=$(find "$TMPDIR" -type f -name "$TARGET_NAME" | head -n 1)
 fi
 if [ -z "$NEWBIN" ] || [ ! -f "$NEWBIN" ]; then
-  NEWBIN=$(find "$TMPDIR" -type f -name "PinkHunkDB" | head -n 1)
+  NEWBIN=$(find "$TMPDIR" -type f -name "PinkHunkReader" | head -n 1)
 fi
 if [ -z "$NEWBIN" ] || [ ! -f "$NEWBIN" ]; then
   exit 1
@@ -1270,13 +1269,13 @@ func detectMacAppPath(exePath string) string {
 func resolveMacUpdateTarget(exePath string) string {
 	targetApp := detectMacAppPath(exePath)
 	if targetApp == "" {
-		return "/Applications/PinkHunkDB.app"
+		return "/Applications/PinkHunkReader.app"
 	}
 	targetApp = filepath.Clean(targetApp)
 	// Gatekeeper App Translocation 路径不可用于稳定覆盖更新，统一回退到 /Applications。
 	if strings.Contains(targetApp, string(filepath.Separator)+"AppTranslocation"+string(filepath.Separator)) {
-		logger.Warnf("检测到 AppTranslocation 运行路径，更新目标回退至 /Applications/PinkHunkDB.app：%s", targetApp)
-		return "/Applications/PinkHunkDB.app"
+		log.Printf("检测到 AppTranslocation 运行路径，更新目标回退至 /Applications/PinkHunkReader.app：%s", targetApp)
+		return "/Applications/PinkHunkReader.app"
 	}
 	return targetApp
 }

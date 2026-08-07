@@ -1,4 +1,4 @@
-package app
+﻿package app
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ var packageVersionPathResolver = defaultPackageVersionPaths
 func getCurrentVersion() string {
 	version := strings.TrimSpace(AppVersion)
 	if version == "" || version == "0.0.0" {
-		if env := strings.TrimSpace(os.Getenv("GONAVI_VERSION")); env != "" {
+		if env := strings.TrimSpace(os.Getenv("PINKHUNK_READER_VERSION")); env != "" {
 			version = env
 		} else if devVersion, err := readDevelopmentVersion(); err == nil && devVersion != "" {
 			version = devVersion
