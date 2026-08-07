@@ -65,6 +65,14 @@ func updateText(key string, params map[string]any) string {
 		return "SHA256 missing for current platform package"
 	case "app.update.backend.error.check_http_status":
 		return fmt.Sprintf("Update check failed (HTTP %s)", pick("status"))
+	case "app.update.backend.error.release_version_unparseable":
+		return "Could not parse release version"
+	case "app.update.backend.error.online_update_unsupported":
+		return fmt.Sprintf("Online update is not supported on %s", pick("platform"))
+	case "app.update.backend.error.update_package_not_found":
+		return fmt.Sprintf("Update package not found: %s", pick("name"))
+	case "app.update.backend.error.install_unsupported":
+		return fmt.Sprintf("Install is not supported on %s", pick("platform"))
 	default:
 		return key
 	}

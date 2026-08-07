@@ -1,12 +1,11 @@
-package app
+﻿package app
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	stdRuntime "runtime"
 	"strings"
-
-	"GoNavi-Wails/internal/logger"
 )
 
 func pruneHistoricalUpdateArtifacts(currentVersion, stagedVersion string) {
@@ -25,10 +24,10 @@ func pruneHistoricalUpdateArtifacts(currentVersion, stagedVersion string) {
 				continue
 			}
 			if err := os.RemoveAll(path); err != nil {
-				logger.Warnf("清理历史更新目录失败：path=%s err=%v", path, err)
+				log.Printf("清理历史更新目录失败：path=%s err=%v", path, err)
 				continue
 			}
-			logger.Infof("已清理历史更新目录：version=%s path=%s", version, path)
+			log.Printf("已清理历史更新目录：version=%s path=%s", version, path)
 		}
 	}
 }
@@ -133,7 +132,7 @@ func scanUpdateWorkspace(workspaceDir string, addPath func(version, path string)
 }
 
 func parseUpdateStagedDirVersion(dirName string) string {
-	for _, prefix := range []string{".PinkHunkDB-update-", ".GoNavi-Lite-update-", ".gonavi-update-"} {
+	for _, prefix := range []string{".PinkHunkReader-update-", ".GoNavi-Lite-update-", ".gonavi-update-"} {
 		if !strings.HasPrefix(dirName, prefix) {
 			continue
 		}
@@ -149,7 +148,7 @@ func parseUpdateStagedDirVersion(dirName string) string {
 }
 
 func parseMacDesktopUpdateDirVersion(dirName string) string {
-	for _, prefix := range []string{"PinkHunkDB-", "GoNavi-Lite-", "GoNavi-"} {
+	for _, prefix := range []string{"PinkHunkReader-", "GoNavi-Lite-", "GoNavi-"} {
 		if !strings.HasPrefix(dirName, prefix) {
 			continue
 		}
