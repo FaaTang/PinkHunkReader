@@ -111,11 +111,70 @@ function Replace-TargetExecutable([string]$SourceExe, [string]$TargetExe) {
 
 function Start-UpdatedApplication([string]$TargetExe) {
   $targetDir = [System.IO.Path]::GetDirectoryName($TargetExe)
-  $proc = Start-Process -FilePath $TargetExe -WorkingDirectory $targetDir -WindowStyle Hidden -PassThru -ErrorAction Stop
+  # Keep the updated GUI app visible. Only the updater PowerShell process should stay hidden.
+  $proc = Start-Process -FilePath $TargetExe -WorkingDirectory $targetDir -WindowStyle Normal -PassThru -ErrorAction Stop
   if (-not $proc -or $proc.HasExited) {
     throw "relaunch failed for target: $TargetExe"
   }
   Write-UpdateLog ("started updated application: pid={0} path={1}" -f $proc.Id, $TargetExe)
+}
+
+function Update-ShortcutsToTarget([string]$OldExe, [string]$NewExe) {
+  if ([string]::IsNullOrWhiteSpace($OldExe) -or [string]::IsNullOrWhiteSpace($NewExe)) {
+    return
+  }
+  if ($OldExe -ieq $NewExe) {
+    return
+  }
+
+  $roots = @()
+  foreach ($candidate in @(
+      [Environment]::GetFolderPath('Desktop'),
+      [Environment]::GetFolderPath('CommonDesktopDirectory'),
+      [Environment]::GetFolderPath('StartMenu'),
+      [Environment]::GetFolderPath('CommonStartMenu')
+    )) {
+    if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -Path $candidate)) {
+      $roots += $candidate
+    }
+  }
+  if ($roots.Count -eq 0) {
+    return
+  }
+
+  try {
+    $shell = New-Object -ComObject WScript.Shell
+  } catch {
+    Write-UpdateLog ("shortcut COM unavailable: " + $_.Exception.Message)
+    return
+  }
+
+  $oldFull = [System.IO.Path]::GetFullPath($OldExe)
+  $newFull = [System.IO.Path]::GetFullPath($NewExe)
+  $newDir = [System.IO.Path]::GetDirectoryName($newFull)
+  foreach ($root in $roots) {
+    Get-ChildItem -Path $root -Filter '*.lnk' -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+      try {
+        $shortcut = $shell.CreateShortcut($_.FullName)
+        $targetPath = [string]$shortcut.TargetPath
+        if ([string]::IsNullOrWhiteSpace($targetPath)) {
+          return
+        }
+        $targetFull = [System.IO.Path]::GetFullPath($targetPath)
+        if ($targetFull -ieq $oldFull) {
+          $shortcut.TargetPath = $newFull
+          if (-not [string]::IsNullOrWhiteSpace($newDir)) {
+            $shortcut.WorkingDirectory = $newDir
+          }
+          $shortcut.IconLocation = "$newFull,0"
+          $shortcut.Save()
+          Write-UpdateLog ("updated shortcut: " + $_.FullName)
+        }
+      } catch {
+        Write-UpdateLog ("update shortcut failed (" + $_.FullName + "): " + $_.Exception.Message)
+      }
+    }
+  }
 }
 
 function Resolve-LaunchTarget([string]$SourceExe, [string]$TargetExe) {
@@ -135,6 +194,7 @@ function Resolve-LaunchTarget([string]$SourceExe, [string]$TargetExe) {
     Remove-Item -Path $renamedTarget -Force
   }
   Move-Item -Path $TargetExe -Destination $renamedTarget -Force
+  Update-ShortcutsToTarget -OldExe $TargetExe -NewExe $renamedTarget
   return $renamedTarget
 }
 
