@@ -1,6 +1,6 @@
 import { isApplePlatform } from '../utils/platform'
 
-export type ShortcutId = 'save' | 'newFile' | 'open' | 'formatJson' | 'fullscreen' | 'goto' | 'exitFullscreen'
+export type ShortcutId = 'save' | 'newFile' | 'open' | 'closeTab' | 'formatJson' | 'fullscreen' | 'goto' | 'exitFullscreen' | 'settings'
 
 export interface ShortcutBinding {
   key: string
@@ -16,20 +16,24 @@ export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
   save: 'Save file',
   newFile: 'New file',
   open: 'Open',
+  closeTab: 'Close tab',
   formatJson: 'Format / minify JSON',
   fullscreen: 'Toggle full screen',
   goto: 'Go to page / line',
   exitFullscreen: 'Exit full screen',
+  settings: 'Open settings',
 }
 
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
   save: { key: 's', ctrl: true },
   newFile: { key: 'n', ctrl: true },
   open: { key: 'f', ctrl: true, shift: true },
-  formatJson: { key: 'm', ctrl: true, shift: true },
+  closeTab: { key: 'w', ctrl: true },
+  formatJson: { key: 'l', ctrl: true, alt: true },
   fullscreen: { key: 'F11' },
   goto: { key: 'g', ctrl: true },
   exitFullscreen: { key: 'Escape' },
+  settings: { key: 's', ctrl: true, alt: true },
 }
 
 const STORAGE_KEY = 'pinkhunk-reader.shortcuts.v1'
@@ -43,10 +47,12 @@ export function loadShortcuts(): ShortcutMap {
       save: { ...DEFAULT_SHORTCUTS.save, ...parsed.save },
       newFile: { ...DEFAULT_SHORTCUTS.newFile, ...parsed.newFile },
       open: { ...DEFAULT_SHORTCUTS.open, ...parsed.open },
+      closeTab: { ...DEFAULT_SHORTCUTS.closeTab, ...parsed.closeTab },
       formatJson: { ...DEFAULT_SHORTCUTS.formatJson, ...parsed.formatJson },
       fullscreen: { ...DEFAULT_SHORTCUTS.fullscreen, ...parsed.fullscreen },
       goto: { ...DEFAULT_SHORTCUTS.goto, ...parsed.goto },
       exitFullscreen: { ...DEFAULT_SHORTCUTS.exitFullscreen, ...parsed.exitFullscreen },
+      settings: { ...DEFAULT_SHORTCUTS.settings, ...parsed.settings },
     }
   } catch {
     return { ...DEFAULT_SHORTCUTS }

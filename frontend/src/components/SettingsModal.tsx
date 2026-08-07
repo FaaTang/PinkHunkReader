@@ -7,10 +7,11 @@ import {
   formatShortcut,
 } from '../settings/shortcuts'
 import { MAX_RECENT_MAX, MIN_RECENT_MAX } from '../settings/recentFiles'
+import type { useAppUpdateManager } from '../hooks/useAppUpdateManager'
 import './GoToDialog.css'
 import './SettingsModal.css'
 
-const ORDER: ShortcutId[] = ['open', 'newFile', 'save', 'formatJson', 'goto', 'fullscreen', 'exitFullscreen']
+const ORDER: ShortcutId[] = ['open', 'newFile', 'closeTab', 'save', 'formatJson', 'goto', 'settings', 'fullscreen', 'exitFullscreen']
 
 const NAV: { id: SettingsSection; title: string; description: string }[] = [
   {
@@ -23,9 +24,20 @@ const NAV: { id: SettingsSection; title: string; description: string }[] = [
     title: 'General',
     description: 'Recent files and other preferences',
   },
+  {
+    id: 'about',
+    title: 'About',
+    description: 'Version and software updates',
+  },
 ]
 
-export function SettingsModal() {
+type UpdateManager = ReturnType<typeof useAppUpdateManager>
+
+interface Props {
+  update?: UpdateManager
+}
+
+export function SettingsModal({ update }: Props) {
   const {
     settingsOpen,
     closeSettings,
@@ -49,6 +61,12 @@ export function SettingsModal() {
   useEffect(() => {
     if (settingsOpen) setRecentDraft(String(recentMax))
   }, [settingsOpen, recentMax])
+
+  useEffect(() => {
+    if (settingsOpen && settingsSection === 'about') {
+      void update?.refreshAppInfo()
+    }
+  }, [settingsOpen, settingsSection, update])
 
   useEffect(() => {
     if (!capturing) return
@@ -139,7 +157,9 @@ export function SettingsModal() {
                   </button>
                 </div>
               </>
-            ) : (
+            ) : null}
+
+            {settingsSection === 'general' ? (
               <>
                 <div className="settings-section-head">
                   <div className="settings-section-title">General</div>
@@ -196,7 +216,108 @@ export function SettingsModal() {
                   </button>
                 </div>
               </>
-            )}
+            ) : null}
+
+            {settingsSection === 'about' ? (
+              <>
+                <div className="settings-section-head">
+                  <div className="settings-section-title">About</div>
+                  <div className="settings-section-desc">
+                    Version info and GitHub Release updates.
+                  </div>
+                </div>
+                <div className="settings-list">
+                  <div className="settings-row settings-row-stack">
+                    <span className="settings-row-label">
+                      PinkHunkReader
+                      <span className="settings-row-sub">
+                        v{update?.appInfo?.version || '…'}
+                        {update?.appInfo?.author ? ` · ${update.appInfo.author}` : ''}
+                      </span>
+                    </span>
+                    {update?.appInfo?.repoUrl ? (
+                      <a className="settings-link" href={update.appInfo.repoUrl} target="_blank" rel="noreferrer">
+                        GitHub
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className="settings-row settings-row-stack">
+                    <span className="settings-row-label">
+                      Updates
+                      <span className="settings-row-sub">{update?.status || 'Not checked'}</span>
+                    </span>
+                    <label className="settings-check">
+                      <input
+                        type="checkbox"
+                        checked={update?.prefs.autoPromptEnabled !== false}
+                        onChange={(e) => update?.setAutoPrompt(e.target.checked)}
+                      />
+                      Auto-prompt when an update is available
+                    </label>
+                  </div>
+                  {update?.lastUpdate?.hasUpdate && update.lastUpdate.releaseNotes ? (
+                    <div className="settings-notes">
+                      <div className="settings-notes-title">
+                        {update.lastUpdate.releaseName || `v${update.lastUpdate.latestVersion}`}
+                      </div>
+                      <pre className="settings-notes-body">{update.lastUpdate.releaseNotes}</pre>
+                    </div>
+                  ) : null}
+                  {update?.error ? <div className="settings-error">{update.error}</div> : null}
+                </div>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="toolbar-btn"
+                    disabled={update?.busy}
+                    onClick={() => void update?.checkForUpdates(false)}
+                  >
+                    Check for updates
+                  </button>
+                  {update?.lastUpdate?.hasUpdate && !update.canInstall ? (
+                    <button
+                      type="button"
+                      className="toolbar-btn primary"
+                      disabled={update.busy}
+                      onClick={() => void update.downloadUpdate()}
+                    >
+                      Download
+                      {update.lastUpdate.assetSize
+                        ? ` (${update.formatBytes(update.lastUpdate.assetSize)})`
+                        : ''}
+                    </button>
+                  ) : null}
+                  {update?.canInstall ? (
+                    <>
+                      <button
+                        type="button"
+                        className="toolbar-btn primary"
+                        disabled={update.busy}
+                        onClick={() => void update.installUpdate()}
+                      >
+                        Install and restart
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-btn"
+                        onClick={() => void update.openDownloadedPackage()}
+                      >
+                        Show package
+                      </button>
+                    </>
+                  ) : null}
+                  {update?.lastUpdate?.hasUpdate ? (
+                    <button type="button" className="toolbar-btn" onClick={() => update.skipThisVersion()}>
+                      Skip this version
+                    </button>
+                  ) : null}
+                  <span style={{ flex: 1 }} />
+                  <button type="button" className="toolbar-btn primary" onClick={closeSettings}>
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

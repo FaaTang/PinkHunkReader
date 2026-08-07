@@ -19,6 +19,9 @@ type App struct {
 
 	quitMu        sync.Mutex
 	quitConfirmed bool
+
+	updateMu    sync.Mutex
+	updateState updateState
 }
 
 func NewApp() *App {

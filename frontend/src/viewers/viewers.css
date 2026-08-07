@@ -604,3 +604,103 @@
   color: var(--ph-fg-1);
   font-weight: 600;
 }
+
+/* Word / Excel read-only viewers */
+.office-root {
+  background: var(--ph-bg-panel);
+}
+
+.office-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ph-br-1);
+  background: var(--ph-bg-chrome);
+  flex-wrap: wrap;
+}
+
+.office-toolbar-label {
+  font-size: 12px;
+  color: var(--ph-fg-3);
+  font-weight: 600;
+}
+
+.office-toolbar-hint {
+  font-size: 11px;
+  color: var(--ph-fg-4);
+}
+
+.office-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.office-doc {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.office-doc table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+
+.office-doc td,
+.office-doc th {
+  border: 1px solid var(--ph-br-2);
+  padding: 4px 8px;
+}
+
+.office-doc img {
+  max-width: 100%;
+  height: auto;
+}
+
+.office-sheet-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--ph-bg-panel);
+}
+
+.office-sheet {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  min-width: 100%;
+}
+
+.office-sheet td,
+.office-sheet th {
+  border: 1px solid var(--ph-br-1);
+  padding: 3px 8px;
+  white-space: pre;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ph-fg-2);
+  vertical-align: top;
+}
+
+.office-row-num {
+  position: sticky;
+  left: 0;
+  background: var(--ph-bg-chrome);
+  color: var(--ph-fg-4);
+  font-weight: 500;
+  text-align: right;
+  min-width: 36px;
+  z-index: 1;
+}
+
+.office-sheet tr:first-child td {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--ph-bg-chrome) 80%, transparent);
+}

@@ -5,6 +5,8 @@ import { PagedMarkdown } from '../viewers/PagedMarkdown'
 import { PagedText } from '../viewers/PagedText'
 import { PdfView } from '../viewers/PdfView'
 import { ImageView } from '../viewers/ImageView'
+import { WordView } from '../viewers/WordView'
+import { ExcelView } from '../viewers/ExcelView'
 import { UnsupportedView } from '../viewers/UnsupportedView'
 import './ViewerHost.css'
 
@@ -31,6 +33,8 @@ export function ViewerHost({ tab, onChange, onDirty, registerSave }: Props) {
         : null}
       {tab.kind === 'pdf' ? <PdfView path={tab.path} /> : null}
       {tab.kind === 'image' ? <ImageView path={tab.path} name={tab.name} /> : null}
+      {tab.kind === 'word' ? <WordView path={tab.path} name={tab.name} /> : null}
+      {tab.kind === 'excel' ? <ExcelView path={tab.path} name={tab.name} /> : null}
       {tab.kind === 'unknown' ? <UnsupportedView name={tab.name} /> : null}
     </div>
   )
