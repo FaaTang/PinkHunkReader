@@ -641,8 +641,15 @@
   overflow: hidden;
 }
 
+.office-split {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
 .office-doc {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }
