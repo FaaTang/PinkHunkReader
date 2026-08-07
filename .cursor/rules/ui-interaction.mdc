@@ -1,0 +1,31 @@
+---
+description: PinkHunkReader UI 交互必须完整、无空白等待态；并按操作系统贴合原生 chrome
+alwaysApply: true
+---
+
+# UI 交互（必须完美）
+
+本仓库是桌面阅读/编辑器，**任何用户可感知的等待都不能露出空洞界面**（黑屏、灰屏、空白主区、只有角落一行小字）。
+
+## 平台原生 chrome（Windows / macOS）
+
+- **窗口控件跟系统走**：macOS 用原生红绿灯（左上），由 Wails `TitleBarHiddenInset` + 工具栏左侧留白；**禁止**在 Mac 上画 Windows 式右上角关闭/最大化。
+- Windows 用系统标题栏（关闭在右上）；不要在 Win 上假冒 Mac 红绿灯。
+- 用 `html.platform-mac` / `platform-windows`（`initPlatformChrome`）写差异样式：标签关闭钮、全屏退出钮位置、字体等。
+- Mac 标签关闭在左侧（Safari 习惯）；Win 可在右侧。
+- 快捷键展示：Mac 用 Cmd/Option，Win 用 Ctrl/Alt（已有 `formatShortcut`）。
+- Mac 工具栏可拖拽窗口（`--wails-draggable`），按钮设 `no-drag`。
+
+## 加载态
+
+- 打开文件、切标签首次渲染、读盘、解码 PDF/图片、Monaco 初始化等：**主内容区必须盖住 `ViewerLoading`（大 spinner + 文案）**，直到首屏可用。
+- 禁止只靠工具栏角标 `Loading…` 或空 `empty` 文本凑合。
+- 增量预取（滚动 Load more）继续用底部 `ScrollLoadFooter`，不要用全屏遮罩打断阅读。
+- 文案用英文 UI；失败用明确错误，不要无限转圈。
+
+## 通用交互
+
+- 可点控件要有 hover / disabled / active；危险操作先确认。
+- 异步按钮在进行中禁用并给出反馈（Saving… / Loading…）。
+- 布局切换（大纲 Hide、MD 模式、全屏）不得闪空白或丢用户偏好（会话内记住）。
+- 新增视图/对话框时复用 `theme.css` 令牌与现有 chrome，勿引入无来源的深色空洞背景当“占位”。

@@ -1,0 +1,127 @@
+.settings-dialog-grouped {
+  width: min(640px, 100%);
+  padding: 16px 16px 12px;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 280px;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+  border-right: 1px solid var(--ph-br-1);
+}
+
+.settings-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--ph-fg-2);
+}
+
+.settings-nav-item:hover {
+  background: var(--ph-bg-hover);
+}
+
+.settings-nav-item.active {
+  background: var(--ph-bg-selected);
+  border-color: rgba(255, 77, 166, 0.35);
+  color: var(--ph-fg-1);
+}
+
+.settings-nav-title {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.settings-nav-desc {
+  font-size: 11px;
+  color: var(--ph-fg-4);
+  line-height: 1.35;
+}
+
+.settings-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-section-head {
+  margin-bottom: 10px;
+}
+
+.settings-section-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ph-fg-1);
+}
+
+.settings-section-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ph-fg-4);
+  line-height: 1.4;
+}
+
+.settings-row-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ph-fg-4);
+}
+
+.settings-row-stack {
+  flex-wrap: wrap;
+}
+
+.settings-number {
+  width: 72px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--ph-br-2);
+  border-radius: 6px;
+  background: var(--ph-bg-panel);
+  color: var(--ph-fg-1);
+  font-size: 13px;
+  text-align: center;
+  font-family: var(--ph-font-mono, ui-monospace, monospace);
+}
+
+.settings-dialog-grouped .settings-list {
+  max-height: min(48vh, 320px);
+}
+
+@media (max-width: 560px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--ph-br-1);
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
+
+  .settings-nav-item {
+    flex: 1 1 140px;
+  }
+}
