@@ -23,14 +23,14 @@ const ORDER: ShortcutId[] = ['open', 'newFile', 'closeTab', 'save', 'formatJson'
 
 const NAV: { id: SettingsSection; title: string; description: string }[] = [
   {
-    id: 'shortcuts',
-    title: 'Shortcuts',
-    description: 'Keyboard bindings for common actions',
-  },
-  {
     id: 'general',
     title: 'General',
     description: 'Recent files and other preferences',
+  },
+  {
+    id: 'shortcuts',
+    title: 'Shortcuts',
+    description: 'Keyboard bindings for common actions',
   },
   {
     id: 'proxy',

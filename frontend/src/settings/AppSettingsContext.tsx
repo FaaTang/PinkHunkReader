@@ -57,7 +57,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => loadRecentFiles(loadRecentMax()))
   const [goToOpen, setGoToOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>('shortcuts')
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const goToTargetRef = useRef<GoToTarget | null>(null)
   const [goToTarget, setGoToTarget] = useState<GoToTarget | null>(null)
 
@@ -112,7 +112,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     closeGoTo: () => setGoToOpen(false),
     settingsOpen,
     settingsSection,
-    openSettings: (section = 'shortcuts') => {
+    openSettings: (section = 'general') => {
       setSettingsSection(section)
       setSettingsOpen(true)
     },
