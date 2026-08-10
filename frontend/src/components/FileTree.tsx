@@ -12,6 +12,7 @@ interface Props {
   revealNonce?: number
   onOpenFile: (path: string) => void
   onRemoveFromWorkspace: (rootPath: string) => void
+  onRemoveAllFromWorkspace: () => void
   onRevealResult?: (ok: boolean, message: string) => void
 }
 
@@ -84,6 +85,7 @@ export function FileTree({
   revealNonce = 0,
   onOpenFile,
   onRemoveFromWorkspace,
+  onRemoveAllFromWorkspace,
   onRevealResult,
 }: Props) {
   const [groups, setGroups] = useState<RootGroup[]>(() => emptyGroups(roots))
@@ -277,6 +279,17 @@ export function FileTree({
           >
             Remove from workspace
             <span className="tree-context-sub">{menu.label}</span>
+          </button>
+          <button
+            type="button"
+            className="tree-context-item"
+            role="menuitem"
+            onClick={() => {
+              setMenu(null)
+              onRemoveAllFromWorkspace()
+            }}
+          >
+            Remove all folders
           </button>
         </div>
       ) : null}

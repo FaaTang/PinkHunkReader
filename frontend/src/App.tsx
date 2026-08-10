@@ -569,6 +569,46 @@ function AppShell() {
     removeTab(path)
   }, [askCloseSave, removeTab, saveTab])
 
+  const closeTabs = useCallback(async (paths: string[]) => {
+    if (!paths.length) return
+    const drop = new Set(paths)
+    const targets = tabsRef.current.filter((t) => drop.has(t.path))
+    if (!targets.length) return
+    const dirty = targets.filter((t) => t.dirty && t.editable)
+    for (let i = 0; i < dirty.length; i++) {
+      const tab = dirty[i]
+      const choice = await askCloseSave(tab, dirty.length - i - 1, 'tab')
+      if (choice === 'cancel') return
+      if (choice === 'save') {
+        const ok = await saveTab(tab)
+        if (!ok) return
+      }
+    }
+    setTabs((prev) => {
+      const next = prev.filter((t) => !drop.has(t.path))
+      if (activePathRef.current && drop.has(activePathRef.current)) {
+        setActivePath(next.length ? next[next.length - 1].path : null)
+      }
+      return next
+    })
+  }, [askCloseSave, saveTab])
+
+  const closeTabsToLeft = useCallback(async (path: string) => {
+    const idx = tabsRef.current.findIndex((t) => t.path === path)
+    if (idx <= 0) return
+    await closeTabs(tabsRef.current.slice(0, idx).map((t) => t.path))
+  }, [closeTabs])
+
+  const closeTabsToRight = useCallback(async (path: string) => {
+    const idx = tabsRef.current.findIndex((t) => t.path === path)
+    if (idx < 0 || idx >= tabsRef.current.length - 1) return
+    await closeTabs(tabsRef.current.slice(idx + 1).map((t) => t.path))
+  }, [closeTabs])
+
+  const closeAllTabs = useCallback(async () => {
+    await closeTabs(tabsRef.current.map((t) => t.path))
+  }, [closeTabs])
+
   const removeFromWorkspace = useCallback(async (rootPath: string) => {
     setError('')
     const target = rootsRef.current.find((r) => pathsEqual(r, rootPath)) ?? rootPath
@@ -606,6 +646,41 @@ function AppShell() {
           ? `Removed ${folderLabel(target)} from workspace`
           : 'No workspace',
       )
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [askCloseSave, saveTab])
+
+  const removeAllFromWorkspace = useCallback(async () => {
+    setError('')
+    if (!rootsRef.current.length) return
+    const affected = tabsRef.current.filter((t) => {
+      if (t.untitled) return false
+      return pathUnderAnyRoot(t.path, rootsRef.current)
+    })
+    const dirty = affected.filter((t) => t.dirty && t.editable)
+    for (let i = 0; i < dirty.length; i++) {
+      const tab = dirty[i]
+      const choice = await askCloseSave(tab, dirty.length - i - 1, 'tab')
+      if (choice === 'cancel') return
+      if (choice === 'save') {
+        const ok = await saveTab(tab)
+        if (!ok) return
+      }
+    }
+    try {
+      await SetRoots([])
+      const drop = new Set(affected.map((t) => t.path))
+      setTabs((prev) => {
+        const next = prev.filter((t) => !drop.has(t.path))
+        if (activePathRef.current && drop.has(activePathRef.current)) {
+          setActivePath(next.length ? next[next.length - 1].path : null)
+        }
+        return next
+      })
+      setRoots([])
+      setTreeRefresh((n) => n + 1)
+      setStatus('No workspace')
     } catch (e) {
       setError(String(e))
     }
@@ -910,6 +985,15 @@ function AppShell() {
             <button
               type="button"
               className="sidebar-refresh"
+              title="Remove all folders"
+              disabled={!roots.length}
+              onClick={() => void removeAllFromWorkspace()}
+            >
+              ⊟
+            </button>
+            <button
+              type="button"
+              className="sidebar-refresh"
               title="Refresh"
               disabled={!roots.length}
               onClick={() => void refreshWorkspace()}
@@ -926,6 +1010,7 @@ function AppShell() {
               revealNonce={revealNonce}
               onOpenFile={(p) => void openFile(p)}
               onRemoveFromWorkspace={(p) => void removeFromWorkspace(p)}
+              onRemoveAllFromWorkspace={() => void removeAllFromWorkspace()}
               onRevealResult={(ok, message) => {
                 setStatus(message)
                 if (!ok) setError(message)
@@ -960,6 +1045,9 @@ function AppShell() {
                 locatablePaths={locatablePaths}
                 onSelect={selectTab}
                 onClose={(p) => void closeTab(p)}
+                onCloseLeft={(p) => void closeTabsToLeft(p)}
+                onCloseRight={(p) => void closeTabsToRight(p)}
+                onCloseAll={() => void closeAllTabs()}
                 onLocate={locateInExplorer}
               />
               {activeTab ? (
