@@ -1,6 +1,16 @@
 import { isApplePlatform } from '../utils/platform'
 
-export type ShortcutId = 'save' | 'newFile' | 'open' | 'closeTab' | 'formatJson' | 'fullscreen' | 'goto' | 'exitFullscreen' | 'settings'
+export type ShortcutId =
+  | 'save'
+  | 'newFile'
+  | 'open'
+  | 'closeTab'
+  | 'formatJson'
+  | 'fullscreen'
+  | 'goto'
+  | 'exitFullscreen'
+  | 'settings'
+  | 'toggleExplorer'
 
 export interface ShortcutBinding {
   key: string
@@ -22,6 +32,7 @@ export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
   goto: 'Go to page / line',
   exitFullscreen: 'Exit full screen',
   settings: 'Open settings',
+  toggleExplorer: 'Show / hide explorer',
 }
 
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
@@ -34,6 +45,7 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
   goto: { key: 'g', ctrl: true },
   exitFullscreen: { key: 'Escape' },
   settings: { key: 's', ctrl: true, alt: true },
+  toggleExplorer: { key: ',', ctrl: true },
 }
 
 const STORAGE_KEY = 'pinkhunk-reader.shortcuts.v1'
@@ -53,6 +65,7 @@ export function loadShortcuts(): ShortcutMap {
       goto: { ...DEFAULT_SHORTCUTS.goto, ...parsed.goto },
       exitFullscreen: { ...DEFAULT_SHORTCUTS.exitFullscreen, ...parsed.exitFullscreen },
       settings: { ...DEFAULT_SHORTCUTS.settings, ...parsed.settings },
+      toggleExplorer: { ...DEFAULT_SHORTCUTS.toggleExplorer, ...parsed.toggleExplorer },
     }
   } catch {
     return { ...DEFAULT_SHORTCUTS }

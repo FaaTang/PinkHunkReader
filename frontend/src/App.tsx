@@ -60,6 +60,18 @@ function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
 }
 
+const EXPLORER_OPEN_KEY = 'pinkhunk-reader.explorer-open.v1'
+
+function loadExplorerOpen(): boolean {
+  try {
+    const raw = localStorage.getItem(EXPLORER_OPEN_KEY)
+    if (raw === null) return true
+    return raw === '1' || raw === 'true'
+  } catch {
+    return true
+  }
+}
+
 function AppShell() {
   const [roots, setRoots] = useState<string[]>([])
   const [windowId, setWindowId] = useState('')
@@ -73,6 +85,18 @@ function AppShell() {
   const [revealNonce, setRevealNonce] = useState(0)
   const [untitledSeq, setUntitledSeq] = useState(1)
   const [sessionReady, setSessionReady] = useState(false)
+  const [explorerOpen, setExplorerOpenState] = useState(loadExplorerOpen)
+  const setExplorerOpen = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setExplorerOpenState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value
+      try {
+        localStorage.setItem(EXPLORER_OPEN_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore quota / private mode */
+      }
+      return next
+    })
+  }, [])
   const [closePrompt, setClosePrompt] = useState<{
     path: string
     name: string
@@ -762,10 +786,11 @@ function AppShell() {
       setStatus('File is not in the current workspace')
       return
     }
+    setExplorerOpen(true)
     setActivePath(path)
     setRevealPath(path)
     setRevealNonce((n) => n + 1)
-  }, [])
+  }, [setExplorerOpen])
 
   const revealInOs = useCallback(async (path: string) => {
     if (!path || path.startsWith('untitled:')) return
@@ -941,6 +966,13 @@ function AppShell() {
         formatActiveJson()
         return
       }
+      if (eventMatchesShortcut(e, shortcuts.toggleExplorer)) {
+        if (typing && !(e.ctrlKey || e.metaKey)) return
+        e.preventDefault()
+        e.stopPropagation()
+        setExplorerOpen((o) => !o)
+        return
+      }
       if (eventMatchesShortcut(e, shortcuts.goto)) {
         if (!goToTarget) return
         e.preventDefault()
@@ -979,6 +1011,7 @@ function AppShell() {
     goToTarget,
     closePrompt,
     placementPrompt,
+    setExplorerOpen,
   ])
 
   const hasWorkspace = roots.length > 0 || tabs.length > 0
@@ -995,7 +1028,7 @@ function AppShell() {
     && Boolean(activeTab && isJsonTab(activeTab.path, activeTab.name))
 
   return (
-    <div className={`layout${fullscreen ? ' is-fullscreen' : ''}`}>
+    <div className={`layout${fullscreen ? ' is-fullscreen' : ''}${explorerOpen ? '' : ' sidebar-collapsed'}`}>
       <header className="toolbar">
         <OpenMenu
           onOpenFile={() => void openPicked('file')}
@@ -1003,6 +1036,14 @@ function AppShell() {
           onOpenRecent={(p) => void openRecent(p)}
           onNewFile={newFile}
         />
+        <button
+          type="button"
+          className={`toolbar-btn${explorerOpen ? ' active-toggle' : ''}`}
+          onClick={() => setExplorerOpen((o) => !o)}
+          title={`${explorerOpen ? 'Hide explorer' : 'Show explorer'} (${formatShortcut(shortcuts.toggleExplorer)})`}
+        >
+          {explorerOpen ? 'Hide explorer' : 'Explorer'}
+        </button>
         {activeTab?.editable ? (
           <button
             type="button"

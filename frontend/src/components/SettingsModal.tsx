@@ -19,7 +19,18 @@ import {
 import './GoToDialog.css'
 import './SettingsModal.css'
 
-const ORDER: ShortcutId[] = ['open', 'newFile', 'closeTab', 'save', 'formatJson', 'goto', 'settings', 'fullscreen', 'exitFullscreen']
+const ORDER: ShortcutId[] = [
+  'open',
+  'newFile',
+  'closeTab',
+  'save',
+  'formatJson',
+  'goto',
+  'toggleExplorer',
+  'settings',
+  'fullscreen',
+  'exitFullscreen',
+]
 
 const NAV: { id: SettingsSection; title: string; description: string }[] = [
   {

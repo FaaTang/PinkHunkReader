@@ -56,6 +56,16 @@ html.platform-mac {
   background: var(--ph-accent-2);
 }
 
+.toolbar-btn.active-toggle {
+  background: var(--ph-accent-soft);
+  border-color: var(--ph-accent);
+  color: var(--ph-fg-1);
+}
+
+.layout.sidebar-collapsed .sidebar {
+  display: none;
+}
+
 .root-path {
   flex: 1;
   min-width: 0;
