@@ -111,7 +111,7 @@ function Replace-TargetExecutable([string]$SourceExe, [string]$TargetExe) {
 
 function Start-UpdatedApplication([string]$TargetExe) {
   $targetDir = [System.IO.Path]::GetDirectoryName($TargetExe)
-  # Keep the updated GUI app visible. Only the updater PowerShell process should stay hidden.
+  # Reader is a GUI app: relaunch visible. Only the updater PowerShell stays hidden (same as PinkHunkDB launcher).
   $proc = Start-Process -FilePath $TargetExe -WorkingDirectory $targetDir -WindowStyle Normal -PassThru -ErrorAction Stop
   if (-not $proc -or $proc.HasExited) {
     throw "relaunch failed for target: $TargetExe"

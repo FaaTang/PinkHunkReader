@@ -271,6 +271,10 @@ func (a *App) InstallUpdateAndRestart() define.QueryResult {
 
 	go func() {
 		time.Sleep(300 * time.Millisecond)
+		// Reader has OnBeforeClose confirmation; updates must quit immediately like PinkHunkDB.
+		a.quitMu.Lock()
+		a.quitConfirmed = true
+		a.quitMu.Unlock()
 		wailsRuntime.Quit(a.ctx)
 	}()
 
