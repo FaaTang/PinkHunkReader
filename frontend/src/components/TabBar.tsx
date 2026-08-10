@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { isApplePlatform } from '../utils/platform'
+import { isApplePlatform, revealInOsLabel } from '../utils/platform'
 import type { OpenTab } from '../types'
 import './TabBar.css'
 
@@ -14,6 +14,7 @@ interface Props {
   onCloseRight: (path: string) => void
   onCloseAll: () => void
   onLocate: (path: string) => void
+  onRevealInOs: (path: string) => void
 }
 
 interface ContextMenuState {
@@ -42,6 +43,7 @@ export function TabBar({
   onCloseRight,
   onCloseAll,
   onLocate,
+  onRevealInOs,
 }: Props) {
   const closeLeading = isApplePlatform()
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
@@ -51,6 +53,8 @@ export function TabBar({
     if (Array.isArray(locatablePaths)) return locatablePaths.some((p) => p === path)
     return locatablePaths.has(path)
   }
+
+  const canRevealInOs = (path: string) => Boolean(path) && !path.startsWith('untitled:')
 
   useEffect(() => {
     if (!menu) return
@@ -73,6 +77,7 @@ export function TabBar({
   const menuIndex = menu ? tabs.findIndex((t) => t.path === menu.path) : -1
   const canCloseLeft = menuIndex > 0
   const canCloseRight = menuIndex >= 0 && menuIndex < tabs.length - 1
+  const menuCanRevealInOs = menu ? canRevealInOs(menu.path) : false
 
   return (
     <div className={`tabbar${closeLeading ? ' tabbar-mac' : ''}`} onContextMenu={(e) => e.preventDefault()}>
@@ -134,6 +139,20 @@ export function TabBar({
           onMouseDown={(e) => e.stopPropagation()}
           role="menu"
         >
+          <button
+            type="button"
+            className="tab-context-item"
+            role="menuitem"
+            disabled={!menuCanRevealInOs}
+            onClick={() => {
+              if (!menuCanRevealInOs) return
+              const path = menu.path
+              setMenu(null)
+              onRevealInOs(path)
+            }}
+          >
+            {revealInOsLabel()}
+          </button>
           <button
             type="button"
             className="tab-context-item"

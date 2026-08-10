@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -169,6 +170,16 @@ func (a *App) finishPickOpen(path string) (define.PickOpenResult, error) {
 		return define.PickOpenResult{Path: path, IsDir: true}, nil
 	}
 	return define.PickOpenResult{Path: path, IsDir: false}, nil
+}
+
+// InspectPath checks whether a filesystem path exists and whether it is a directory.
+// Unlike StatFile, it does not require the path to be under a workspace root (used for drag-drop open).
+func (a *App) InspectPath(path string) (define.PickOpenResult, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return define.PickOpenResult{}, fmt.Errorf("path is empty")
+	}
+	return a.finishPickOpen(path)
 }
 
 // PickAndSaveFile opens a save dialog and returns the chosen path (empty if cancelled).

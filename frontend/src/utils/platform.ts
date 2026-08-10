@@ -31,6 +31,14 @@ function applyPlatformClass(platform: AppPlatform) {
   else if (platform === 'linux') root.classList.add('platform-linux')
 }
 
+/** Context-menu label for revealing a path in the OS file manager. */
+export function revealInOsLabel(): string {
+  const platform = (typeof document !== 'undefined' && document.documentElement.dataset.platform) || ''
+  if (platform === 'mac' || (!platform && isApplePlatform())) return 'Reveal in Finder'
+  if (platform === 'windows') return 'Reveal in File Explorer'
+  return 'Show in Folder'
+}
+
 /**
  * Tag <html> with OS class so CSS can follow platform chrome
  * (Mac traffic lights left, Windows caption right, etc.).

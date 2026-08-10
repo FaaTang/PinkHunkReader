@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ListDir } from '../../wailsjs/go/app/App'
 import type { DirEntry } from '../types'
 import { folderLabel, parentDir, pathUnderRoot, pathsEqual } from '../utils/pathHelpers'
+import { revealInOsLabel } from '../utils/platform'
 import './FileTree.css'
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   onOpenFile: (path: string) => void
   onRemoveFromWorkspace: (rootPath: string) => void
   onRemoveAllFromWorkspace: () => void
+  onRevealInOs: (path: string) => void
   onRevealResult?: (ok: boolean, message: string) => void
 }
 
@@ -33,6 +35,7 @@ interface RootGroup {
 interface ContextMenuState {
   x: number
   y: number
+  clickedPath: string
   rootPath: string
   label: string
 }
@@ -86,6 +89,7 @@ export function FileTree({
   onOpenFile,
   onRemoveFromWorkspace,
   onRemoveAllFromWorkspace,
+  onRevealInOs,
   onRevealResult,
 }: Props) {
   const [groups, setGroups] = useState<RootGroup[]>(() => emptyGroups(roots))
@@ -203,6 +207,7 @@ export function FileTree({
     setMenu({
       x: e.clientX,
       y: e.clientY,
+      clickedPath,
       rootPath,
       label: folderLabel(rootPath),
     })
@@ -267,6 +272,18 @@ export function FileTree({
           onMouseDown={(e) => e.stopPropagation()}
           role="menu"
         >
+          <button
+            type="button"
+            className="tree-context-item"
+            role="menuitem"
+            onClick={() => {
+              const path = menu.clickedPath
+              setMenu(null)
+              onRevealInOs(path)
+            }}
+          >
+            {revealInOsLabel()}
+          </button>
           <button
             type="button"
             className="tree-context-item"

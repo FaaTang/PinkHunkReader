@@ -31,6 +31,8 @@ export function GetRoots():Promise<Array<string>>;
 
 export function InstallUpdateAndRestart():Promise<define.QueryResult>;
 
+export function InspectPath(arg1:string):Promise<define.PickOpenResult>;
+
 export function ListDir(arg1:string):Promise<Array<define.DirEntry>>;
 
 export function ListWindowsToRestore():Promise<Array<string>>;
@@ -62,6 +64,8 @@ export function ReadText(arg1:string):Promise<string>;
 export function RegisterWindow(arg1:string):Promise<void>;
 
 export function RemoveRoot(arg1:string):Promise<void>;
+
+export function RevealInFileManager(arg1:string):Promise<void>;
 
 export function SaveGlobalProxy(arg1:app.GlobalProxyView):Promise<define.QueryResult>;
 

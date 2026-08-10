@@ -58,6 +58,10 @@ export function InstallUpdateAndRestart() {
   return window['go']['app']['App']['InstallUpdateAndRestart']();
 }
 
+export function InspectPath(arg1) {
+  return window['go']['app']['App']['InspectPath'](arg1);
+}
+
 export function ListDir(arg1) {
   return window['go']['app']['App']['ListDir'](arg1);
 }
@@ -120,6 +124,10 @@ export function RegisterWindow(arg1) {
 
 export function RemoveRoot(arg1) {
   return window['go']['app']['App']['RemoveRoot'](arg1);
+}
+
+export function RevealInFileManager(arg1) {
+  return window['go']['app']['App']['RevealInFileManager'](arg1);
 }
 
 export function SaveGlobalProxy(arg1) {

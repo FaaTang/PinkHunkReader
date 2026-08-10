@@ -123,6 +123,66 @@ html.platform-mac {
   cursor: default;
 }
 
+.sidebar-tree-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sidebar-drop-hint {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 16px;
+  text-align: center;
+  color: var(--ph-fg-4);
+  font-size: 12px;
+  line-height: 1.45;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  margin: 8px;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-drop-hint-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ph-fg-3);
+}
+
+.sidebar-drop-hint-sub {
+  font-size: 11px;
+  color: var(--ph-fg-4);
+}
+
+.sidebar-drop-hint-footer {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border-radius: 0;
+  border: none;
+  border-top: 1px dashed var(--ph-br-1);
+  font-size: 11px;
+}
+
+.sidebar.wails-drop-target-active,
+.sidebar.wails-drop-target-active .sidebar-drop-hint {
+  background: color-mix(in srgb, var(--ph-accent) 8%, var(--ph-bg-panel));
+}
+
+.sidebar.wails-drop-target-active .sidebar-drop-hint {
+  border-color: var(--ph-accent);
+  color: var(--ph-accent-2);
+}
+
+.sidebar.wails-drop-target-active .sidebar-drop-hint-title,
+.sidebar.wails-drop-target-active .sidebar-drop-hint-footer {
+  color: var(--ph-accent-2);
+}
+
 .main {
   flex: 1;
   min-width: 0;

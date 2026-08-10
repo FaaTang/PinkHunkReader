@@ -38,11 +38,13 @@ import {
   GetLaunchInfo,
   GetOpenPlacementPrefs,
   GetRoots,
+  InspectPath,
   LoadWindowSession,
   PickAndOpen,
   PickAndSaveFile,
   ReadText,
   RemoveRoot,
+  RevealInFileManager,
   SaveOpenPlacementPrefs,
   SaveWindowSession,
   SetRoots,
@@ -52,7 +54,7 @@ import {
   WriteText,
 } from '../wailsjs/go/app/App'
 import { define } from '../wailsjs/go/models'
-import { EventsOn } from '../wailsjs/runtime/runtime'
+import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
 
 function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
@@ -399,10 +401,12 @@ function AppShell() {
     return askOpenPlacement(pathLabel, prefs.target)
   }, [askOpenPlacement])
 
-  const openPathInPlacement = useCallback(async (path: string, isDir: boolean) => {
+  const openPathWithChoice = useCallback(async (
+    path: string,
+    isDir: boolean,
+    choice: OpenPlacementChoice,
+  ) => {
     const label = isDir ? folderLabel(path) : path.split(/[/\\]/).pop() || path
-    const choice = await resolveOpenPlacement(label)
-    if (choice === 'cancel') return
     if (choice === 'new') {
       await SpawnNewWindow(path, isDir)
       setStatus(`Opened in new window · ${label}`)
@@ -410,13 +414,55 @@ function AppShell() {
     }
     if (isDir) {
       await ensureRoot(path)
+      setStatus(`Opened folder · ${label}`)
       return
     }
     if (!pathUnderAnyRoot(path, rootsRef.current)) {
       await ensureRoot(parentDir(path))
     }
     await openFile(path)
-  }, [ensureRoot, openFile, resolveOpenPlacement])
+  }, [ensureRoot, openFile])
+
+  const openPathInPlacement = useCallback(async (path: string, isDir: boolean) => {
+    const label = isDir ? folderLabel(path) : path.split(/[/\\]/).pop() || path
+    const choice = await resolveOpenPlacement(label)
+    if (choice === 'cancel') return
+    await openPathWithChoice(path, isDir, choice)
+  }, [openPathWithChoice, resolveOpenPlacement])
+
+  const openDroppedPaths = useCallback(async (paths: string[]) => {
+    const unique = [...new Set(paths.map((p) => normalizePath(p)).filter(Boolean))]
+    if (!unique.length) return
+    setError('')
+    try {
+      const items: { path: string; isDir: boolean }[] = []
+      for (const path of unique) {
+        const probed = await InspectPath(path)
+        if (!probed?.path) continue
+        items.push({ path: probed.path, isDir: Boolean(probed.isDir) })
+      }
+      if (!items.length) {
+        setError('No valid files or folders to open')
+        return
+      }
+      const summary =
+        items.length === 1
+          ? items[0].isDir
+            ? folderLabel(items[0].path)
+            : items[0].path.split(/[/\\]/).pop() || items[0].path
+          : `${items.length} items`
+      const choice = await resolveOpenPlacement(summary)
+      if (choice === 'cancel') return
+      for (const item of items) {
+        await openPathWithChoice(item.path, item.isDir, choice)
+      }
+      if (items.length > 1 && choice === 'current') {
+        setStatus(`Opened ${items.length} items`)
+      }
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [openPathWithChoice, resolveOpenPlacement])
 
   const openPicked = useCallback(async (mode: 'file' | 'folder') => {
     setError('')
@@ -721,6 +767,17 @@ function AppShell() {
     setRevealNonce((n) => n + 1)
   }, [])
 
+  const revealInOs = useCallback(async (path: string) => {
+    if (!path || path.startsWith('untitled:')) return
+    try {
+      await RevealInFileManager(path)
+      setStatus(`Opened in file manager · ${folderLabel(path)}`)
+      setError('')
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [])
+
   const refreshWorkspace = useCallback(async () => {
     setError('')
     setTreeRefresh((n) => n + 1)
@@ -814,6 +871,16 @@ function AppShell() {
       off()
     }
   }, [handleQuitRequested])
+
+  useEffect(() => {
+    OnFileDrop((_x, _y, paths) => {
+      if (!paths?.length) return
+      void openDroppedPaths(paths)
+    }, true)
+    return () => {
+      OnFileDropOff()
+    }
+  }, [openDroppedPaths])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -979,7 +1046,7 @@ function AppShell() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       <div className="body">
-        <aside className="sidebar">
+        <aside className="sidebar" style={{ ['--wails-drop-target' as string]: 'drop' }}>
           <div className="sidebar-title">
             <span className="sidebar-title-text">Explorer</span>
             <button
@@ -1002,24 +1069,35 @@ function AppShell() {
             </button>
           </div>
           {roots.length ? (
-            <FileTree
-              roots={roots}
-              refreshToken={treeRefresh}
-              activePath={activePath}
-              revealPath={revealPath}
-              revealNonce={revealNonce}
-              onOpenFile={(p) => void openFile(p)}
-              onRemoveFromWorkspace={(p) => void removeFromWorkspace(p)}
-              onRemoveAllFromWorkspace={() => void removeAllFromWorkspace()}
-              onRevealResult={(ok, message) => {
-                setStatus(message)
-                if (!ok) setError(message)
-                else setError('')
-              }}
-            />
+            <>
+              <div className="sidebar-tree-wrap">
+                <FileTree
+                  roots={roots}
+                  refreshToken={treeRefresh}
+                  activePath={activePath}
+                  revealPath={revealPath}
+                  revealNonce={revealNonce}
+                  onOpenFile={(p) => void openFile(p)}
+                  onRemoveFromWorkspace={(p) => void removeFromWorkspace(p)}
+                  onRemoveAllFromWorkspace={() => void removeAllFromWorkspace()}
+                  onRevealInOs={(p) => void revealInOs(p)}
+                  onRevealResult={(ok, message) => {
+                    setStatus(message)
+                    if (!ok) setError(message)
+                    else setError('')
+                  }}
+                />
+              </div>
+              <div className="sidebar-drop-hint sidebar-drop-hint-footer">
+                Drop files or folders here to open
+              </div>
+            </>
           ) : (
-            <div className="empty" style={{ padding: 16, fontSize: 12 }}>
-              Use File → Open or Open Folder
+            <div className="sidebar-drop-hint">
+              <div className="sidebar-drop-hint-title">Drop files or folders here</div>
+              <div className="sidebar-drop-hint-sub">
+                Or use File → Open / Open Folder
+              </div>
             </div>
           )}
         </aside>
@@ -1049,6 +1127,7 @@ function AppShell() {
                 onCloseRight={(p) => void closeTabsToRight(p)}
                 onCloseAll={() => void closeAllTabs()}
                 onLocate={locateInExplorer}
+                onRevealInOs={(p) => void revealInOs(p)}
               />
               {activeTab ? (
                 <ViewerHost

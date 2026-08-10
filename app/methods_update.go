@@ -314,32 +314,14 @@ func (a *App) openDownloadedUpdatePackage(revealFile bool) define.QueryResult {
 		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.package_directory_unavailable", nil)}
 	}
 
-	dirPath := strings.TrimSpace(filepath.Dir(assetPath))
-	if dirPath == "" || dirPath == "." {
-		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.package_directory_unresolved", nil)}
-	}
-
-	var cmd *exec.Cmd
-	switch stdRuntime.GOOS {
-	case "darwin":
-		if revealFile {
-			cmd = exec.Command("open", "-R", assetPath)
-		} else {
-			cmd = exec.Command("open", dirPath)
-		}
-	case "windows":
-		if revealFile {
-			cmd = exec.Command("explorer", "/select,", filepath.Clean(assetPath))
-		} else {
-			cmd = exec.Command("explorer", dirPath)
-		}
-	case "linux":
-		cmd = exec.Command("xdg-open", dirPath)
-	default:
-		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.open_directory_unsupported", map[string]any{"platform": stdRuntime.GOOS})}
-	}
-	if err := cmd.Start(); err != nil {
+	if err := revealPathInFileManager(assetPath, revealFile); err != nil {
 		log.Printf("打开更新包路径失败: %v", err)
+		if strings.Contains(err.Error(), "unsupported") {
+			return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.open_directory_unsupported", map[string]any{"platform": stdRuntime.GOOS})}
+		}
+		if strings.Contains(err.Error(), "could not resolve") {
+			return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.package_directory_unresolved", nil)}
+		}
 		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.open_directory_failed", map[string]any{"detail": err.Error()})}
 	}
 	return define.QueryResult{
