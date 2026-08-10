@@ -32,8 +32,11 @@ type WindowSessionTab struct {
 	Content      string `json:"content,omitempty"`
 }
 
-// OpenPlacementPrefs controls open-in-current vs new-window behavior.
+// OpenPlacementPrefs controls open-in-current vs new-window behavior,
+// and whether opening a file also adds its parent folder to the workspace.
 type OpenPlacementPrefs struct {
-	Target string `json:"target"` // "current" | "new"
-	Mode   string `json:"mode"`   // "ask" | "always"
+	Target             string `json:"target"`             // "current" | "new"
+	Mode               string `json:"mode"`               // "ask" | "always"
+	ParentFolderTarget string `json:"parentFolderTarget"` // "parent" | "file"
+	ParentFolderMode   string `json:"parentFolderMode"`   // "ask" | "always"
 }

@@ -7,6 +7,10 @@ import { FileTree } from './components/FileTree'
 import { GoToDialog } from './components/GoToDialog'
 import { OpenMenu } from './components/OpenMenu'
 import { OpenPlacementDialog, type OpenPlacementChoice } from './components/OpenPlacementDialog'
+import {
+  OpenParentFolderDialog,
+  type OpenParentFolderChoice,
+} from './components/OpenParentFolderDialog'
 import { SettingsModal } from './components/SettingsModal'
 import { UpdateProgressDialog } from './components/UpdateProgressDialog'
 import { useAppUpdateManager } from './hooks/useAppUpdateManager'
@@ -21,7 +25,11 @@ import {
   type SessionState,
   type SessionTab,
 } from './settings/session'
-import { normalizeOpenPlacement, DEFAULT_OPEN_PLACEMENT } from './settings/openPlacement'
+import {
+  normalizeOpenPlacement,
+  DEFAULT_OPEN_PLACEMENT,
+  type OpenPlacementPrefs,
+} from './settings/openPlacement'
 import { eventMatchesShortcut, formatShortcut } from './settings/shortcuts'
 import type { FileInfo, OpenTab } from './types'
 import { isJsonTab, toggleJsonFormat } from './utils/jsonFormat'
@@ -107,6 +115,10 @@ function AppShell() {
     pathLabel: string
     defaultTarget: OpenPlacementChoice
   } | null>(null)
+  const [parentFolderPrompt, setParentFolderPrompt] = useState<{
+    pathLabel: string
+    defaultTarget: OpenParentFolderChoice
+  } | null>(null)
 
   const pagedSaveRef = useRef<(() => Promise<void>) | null>(null)
   const tabsRef = useRef(tabs)
@@ -116,6 +128,7 @@ function AppShell() {
   const untitledSeqRef = useRef(untitledSeq)
   const closeResolverRef = useRef<((c: CloseSaveChoice) => void) | null>(null)
   const placementResolverRef = useRef<((c: OpenPlacementChoice | 'cancel') => void) | null>(null)
+  const parentFolderResolverRef = useRef<((c: OpenParentFolderChoice | 'cancel') => void) | null>(null)
   const quittingRef = useRef(false)
 
   tabsRef.current = tabs
@@ -218,6 +231,26 @@ function AppShell() {
       setPlacementPrompt({ pathLabel, defaultTarget })
     })
   }, [])
+
+  const askOpenParentFolder = useCallback((pathLabel: string, defaultTarget: OpenParentFolderChoice) => {
+    return new Promise<OpenParentFolderChoice | 'cancel'>((resolve) => {
+      parentFolderResolverRef.current = resolve
+      setParentFolderPrompt({ pathLabel, defaultTarget })
+    })
+  }, [])
+
+  const loadOpenPrefs = useCallback(async (): Promise<OpenPlacementPrefs> => {
+    try {
+      return normalizeOpenPlacement(await GetOpenPlacementPrefs())
+    } catch {
+      return normalizeOpenPlacement(DEFAULT_OPEN_PLACEMENT)
+    }
+  }, [])
+
+  const saveOpenPrefsPatch = useCallback(async (patch: Partial<OpenPlacementPrefs>) => {
+    const current = await loadOpenPrefs()
+    await SaveOpenPlacementPrefs({ ...current, ...patch })
+  }, [loadOpenPrefs])
 
   const openFile = useCallback(async (path: string) => {
     setError('')
@@ -391,8 +424,23 @@ function AppShell() {
           if (launch.openIsDir) {
             await ensureRoot(launch.openPath)
           } else {
-            await ensureRoot(parentDir(launch.openPath))
-            if (!cancelled) await openFile(launch.openPath)
+            const label = launch.openPath.split(/[/\\]/).pop() || launch.openPath
+            let prefs = normalizeOpenPlacement(DEFAULT_OPEN_PLACEMENT)
+            try {
+              prefs = normalizeOpenPlacement(await GetOpenPlacementPrefs())
+            } catch {
+              /* defaults */
+            }
+            let parentChoice: OpenParentFolderChoice | 'cancel' = prefs.parentFolderTarget
+            if (prefs.parentFolderMode !== 'always') {
+              parentChoice = await askOpenParentFolder(label, prefs.parentFolderTarget)
+            }
+            if (!cancelled && parentChoice !== 'cancel') {
+              const rootPath =
+                parentChoice === 'file' ? launch.openPath : parentDir(launch.openPath)
+              await ensureRoot(rootPath)
+              await openFile(launch.openPath)
+            }
           }
         } else {
           const legacy = loadLegacyLocalSession()
@@ -411,24 +459,28 @@ function AppShell() {
     return () => {
       cancelled = true
     }
-  }, [applySessionState, ensureRoot, openFile])
+  }, [applySessionState, askOpenParentFolder, ensureRoot, openFile])
 
   const resolveOpenPlacement = useCallback(async (pathLabel: string): Promise<OpenPlacementChoice | 'cancel'> => {
     if (rootsRef.current.length === 0) return 'current'
-    let prefs = normalizeOpenPlacement(DEFAULT_OPEN_PLACEMENT)
-    try {
-      prefs = normalizeOpenPlacement(await GetOpenPlacementPrefs())
-    } catch {
-      /* defaults */
-    }
+    const prefs = await loadOpenPrefs()
     if (prefs.mode === 'always') return prefs.target
     return askOpenPlacement(pathLabel, prefs.target)
-  }, [askOpenPlacement])
+  }, [askOpenPlacement, loadOpenPrefs])
+
+  const resolveOpenParentFolder = useCallback(async (
+    pathLabel: string,
+  ): Promise<OpenParentFolderChoice | 'cancel'> => {
+    const prefs = await loadOpenPrefs()
+    if (prefs.parentFolderMode === 'always') return prefs.parentFolderTarget
+    return askOpenParentFolder(pathLabel, prefs.parentFolderTarget)
+  }, [askOpenParentFolder, loadOpenPrefs])
 
   const openPathWithChoice = useCallback(async (
     path: string,
     isDir: boolean,
     choice: OpenPlacementChoice,
+    parentFolderChoice?: OpenParentFolderChoice,
   ) => {
     const label = isDir ? folderLabel(path) : path.split(/[/\\]/).pop() || path
     if (choice === 'new') {
@@ -442,10 +494,17 @@ function AppShell() {
       return
     }
     if (!pathUnderAnyRoot(path, rootsRef.current)) {
-      await ensureRoot(parentDir(path))
+      let parentChoice = parentFolderChoice
+      if (!parentChoice) {
+        const resolved = await resolveOpenParentFolder(label)
+        if (resolved === 'cancel') return
+        parentChoice = resolved
+      }
+      const rootPath = parentChoice === 'file' ? path : parentDir(path)
+      await ensureRoot(rootPath)
     }
     await openFile(path)
-  }, [ensureRoot, openFile])
+  }, [ensureRoot, openFile, resolveOpenParentFolder])
 
   const openPathInPlacement = useCallback(async (path: string, isDir: boolean) => {
     const label = isDir ? folderLabel(path) : path.split(/[/\\]/).pop() || path
@@ -477,8 +536,17 @@ function AppShell() {
           : `${items.length} items`
       const choice = await resolveOpenPlacement(summary)
       if (choice === 'cancel') return
+      const needsParentAsk =
+        choice === 'current' &&
+        items.some((item) => !item.isDir && !pathUnderAnyRoot(item.path, rootsRef.current))
+      let parentFolderChoice: OpenParentFolderChoice | undefined
+      if (needsParentAsk) {
+        const resolved = await resolveOpenParentFolder(summary)
+        if (resolved === 'cancel') return
+        parentFolderChoice = resolved
+      }
       for (const item of items) {
-        await openPathWithChoice(item.path, item.isDir, choice)
+        await openPathWithChoice(item.path, item.isDir, choice, parentFolderChoice)
       }
       if (items.length > 1 && choice === 'current') {
         setStatus(`Opened ${items.length} items`)
@@ -486,7 +554,7 @@ function AppShell() {
     } catch (e) {
       setError(String(e))
     }
-  }, [openPathWithChoice, resolveOpenPlacement])
+  }, [openPathWithChoice, resolveOpenParentFolder, resolveOpenPlacement])
 
   const openPicked = useCallback(async (mode: 'file' | 'folder') => {
     setError('')
@@ -845,17 +913,36 @@ function AppShell() {
     placementResolverRef.current = null
     setPlacementPrompt(null)
     if (always) {
-      void SaveOpenPlacementPrefs({ target: choice, mode: 'always' }).catch(() => {
+      void saveOpenPrefsPatch({ target: choice, mode: 'always' }).catch(() => {
         /* ignore */
       })
     }
     resolve?.(choice)
-  }, [])
+  }, [saveOpenPrefsPatch])
 
   const handlePlacementCancel = useCallback(() => {
     const resolve = placementResolverRef.current
     placementResolverRef.current = null
     setPlacementPrompt(null)
+    resolve?.('cancel')
+  }, [])
+
+  const handleParentFolderChoice = useCallback((choice: OpenParentFolderChoice, always: boolean) => {
+    const resolve = parentFolderResolverRef.current
+    parentFolderResolverRef.current = null
+    setParentFolderPrompt(null)
+    if (always) {
+      void saveOpenPrefsPatch({ parentFolderTarget: choice, parentFolderMode: 'always' }).catch(() => {
+        /* ignore */
+      })
+    }
+    resolve?.(choice)
+  }, [saveOpenPrefsPatch])
+
+  const handleParentFolderCancel = useCallback(() => {
+    const resolve = parentFolderResolverRef.current
+    parentFolderResolverRef.current = null
+    setParentFolderPrompt(null)
     resolve?.('cancel')
   }, [])
 
@@ -913,7 +1000,7 @@ function AppShell() {
       const typing =
         tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable
 
-      if (closePrompt || placementPrompt) return
+      if (closePrompt || placementPrompt || parentFolderPrompt) return
 
       if (goToOpen || settingsOpen) {
         if (eventMatchesShortcut(e, shortcuts.exitFullscreen) && fullscreen && !typing) {
@@ -1011,6 +1098,7 @@ function AppShell() {
     goToTarget,
     closePrompt,
     placementPrompt,
+    parentFolderPrompt,
     setExplorerOpen,
   ])
 
@@ -1217,6 +1305,13 @@ function AppShell() {
         defaultTarget={placementPrompt?.defaultTarget ?? 'current'}
         onChoice={handlePlacementChoice}
         onCancel={handlePlacementCancel}
+      />
+      <OpenParentFolderDialog
+        open={Boolean(parentFolderPrompt)}
+        pathLabel={parentFolderPrompt?.pathLabel ?? ''}
+        defaultTarget={parentFolderPrompt?.defaultTarget ?? 'file'}
+        onChoice={handleParentFolderChoice}
+        onCancel={handleParentFolderCancel}
       />
       <SettingsModal update={update} />
       <UpdateProgressDialog

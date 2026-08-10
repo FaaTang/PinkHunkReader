@@ -54,12 +54,12 @@ export function GetRoots() {
   return window['go']['app']['App']['GetRoots']();
 }
 
-export function InstallUpdateAndRestart() {
-  return window['go']['app']['App']['InstallUpdateAndRestart']();
-}
-
 export function InspectPath(arg1) {
   return window['go']['app']['App']['InspectPath'](arg1);
+}
+
+export function InstallUpdateAndRestart() {
+  return window['go']['app']['App']['InstallUpdateAndRestart']();
 }
 
 export function ListDir(arg1) {

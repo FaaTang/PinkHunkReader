@@ -12,6 +12,8 @@ import { GetGlobalProxyConfig, GetOpenPlacementPrefs, SaveGlobalProxy, SaveOpenP
 import {
   DEFAULT_OPEN_PLACEMENT,
   normalizeOpenPlacement,
+  type OpenParentFolderMode,
+  type OpenParentFolderTarget,
   type OpenPlacementMode,
   type OpenPlacementPrefs,
   type OpenPlacementTarget,
@@ -399,6 +401,50 @@ export function SettingsModal({ update }: Props) {
                         })
                       }
                       aria-label="When already open"
+                    >
+                      <option value="ask">Ask every time</option>
+                      <option value="always">Always use preference</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-label">
+                      When opening a file
+                      <span className="settings-row-sub">
+                        Add the parent folder to Explorer, or open the file alone
+                      </span>
+                    </span>
+                    <select
+                      className="settings-select"
+                      value={openPlacement.parentFolderTarget}
+                      onChange={(e) =>
+                        void applyOpenPlacement({
+                          ...openPlacement,
+                          parentFolderTarget: e.target.value as OpenParentFolderTarget,
+                        })
+                      }
+                      aria-label="When opening a file"
+                    >
+                      <option value="parent">Open parent folder</option>
+                      <option value="file">File only</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-label">
+                      Remember parent folder choice
+                      <span className="settings-row-sub">
+                        Ask each time, or always use the preference above
+                      </span>
+                    </span>
+                    <select
+                      className="settings-select"
+                      value={openPlacement.parentFolderMode}
+                      onChange={(e) =>
+                        void applyOpenPlacement({
+                          ...openPlacement,
+                          parentFolderMode: e.target.value as OpenParentFolderMode,
+                        })
+                      }
+                      aria-label="Remember parent folder choice"
                     >
                       <option value="ask">Ask every time</option>
                       <option value="always">Always use preference</option>

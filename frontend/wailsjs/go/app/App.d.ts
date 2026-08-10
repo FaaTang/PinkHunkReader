@@ -29,9 +29,9 @@ export function GetRoot():Promise<string>;
 
 export function GetRoots():Promise<Array<string>>;
 
-export function InstallUpdateAndRestart():Promise<define.QueryResult>;
-
 export function InspectPath(arg1:string):Promise<define.PickOpenResult>;
+
+export function InstallUpdateAndRestart():Promise<define.QueryResult>;
 
 export function ListDir(arg1:string):Promise<Array<define.DirEntry>>;
 

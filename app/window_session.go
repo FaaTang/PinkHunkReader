@@ -246,7 +246,12 @@ func (a *App) LoadWindowSession(windowID string) (define.WindowSessionState, err
 
 // GetOpenPlacementPrefs returns open placement preferences.
 func (a *App) GetOpenPlacementPrefs() (define.OpenPlacementPrefs, error) {
-	prefs := define.OpenPlacementPrefs{Target: "current", Mode: "ask"}
+	prefs := define.OpenPlacementPrefs{
+		Target:             "current",
+		Mode:               "ask",
+		ParentFolderTarget: "file",
+		ParentFolderMode:   "always",
+	}
 	err := withWindowStore(func(configDir string) error {
 		path := openPrefsPath(configDir)
 		var loaded define.OpenPlacementPrefs
@@ -280,7 +285,20 @@ func normalizeOpenPrefs(p define.OpenPlacementPrefs) define.OpenPlacementPrefs {
 	if mode != "always" {
 		mode = "ask"
 	}
-	return define.OpenPlacementPrefs{Target: target, Mode: mode}
+	parentTarget := strings.ToLower(strings.TrimSpace(p.ParentFolderTarget))
+	if parentTarget != "parent" {
+		parentTarget = "file"
+	}
+	parentMode := strings.ToLower(strings.TrimSpace(p.ParentFolderMode))
+	if parentMode != "ask" {
+		parentMode = "always"
+	}
+	return define.OpenPlacementPrefs{
+		Target:             target,
+		Mode:               mode,
+		ParentFolderTarget: parentTarget,
+		ParentFolderMode:   parentMode,
+	}
 }
 
 // ListWindowsToRestore returns stale (dead-pid) window ids for crash recovery.

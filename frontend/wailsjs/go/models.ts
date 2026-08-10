@@ -108,6 +108,8 @@ export namespace define {
 	export class OpenPlacementPrefs {
 	    target: string;
 	    mode: string;
+	    parentFolderTarget: string;
+	    parentFolderMode: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new OpenPlacementPrefs(source);
@@ -117,6 +119,8 @@ export namespace define {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.target = source["target"];
 	        this.mode = source["mode"];
+	        this.parentFolderTarget = source["parentFolderTarget"];
+	        this.parentFolderMode = source["parentFolderMode"];
 	    }
 	}
 	export class PickOpenResult {

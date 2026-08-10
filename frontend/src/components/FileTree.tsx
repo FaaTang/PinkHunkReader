@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ListDir } from '../../wailsjs/go/app/App'
+import { DetectKind, InspectPath, ListDir } from '../../wailsjs/go/app/App'
 import type { DirEntry } from '../types'
 import { folderLabel, parentDir, pathUnderRoot, pathsEqual } from '../utils/pathHelpers'
 import { revealInOsLabel } from '../utils/platform'
@@ -101,6 +101,28 @@ export function FileTree({
     for (const root of roots) {
       const prev = keep?.find((g) => pathsEqual(g.root, root))
       try {
+        const probed = await InspectPath(root)
+        if (probed && !probed.isDir) {
+          const name = folderLabel(root)
+          const kind = await DetectKind(root)
+          next.push({
+            root,
+            name,
+            expanded: false,
+            nodes: [
+              {
+                entry: {
+                  name,
+                  path: root,
+                  isDir: false,
+                  kind,
+                },
+              },
+            ],
+            error: '',
+          })
+          continue
+        }
         const entries = await ListDir(root)
         const nodes = prev?.nodes?.length
           ? await mergeExpanded(entries, prev.nodes)
@@ -164,7 +186,13 @@ export function FileTree({
       try {
         const prev = groups.find((g) => pathsEqual(g.root, root))
         let nodes = prev?.nodes ?? []
-        if (!nodes.length) {
+        if (pathsEqual(root, revealPath)) {
+          if (!nodes.length) {
+            const name = folderLabel(root)
+            const kind = await DetectKind(root)
+            nodes = [{ entry: { name, path: root, isDir: false, kind } }]
+          }
+        } else if (!nodes.length) {
           const entries = await ListDir(root)
           nodes = entries.map((e) => ({ entry: e }))
         }
@@ -238,33 +266,62 @@ export function FileTree({
 
   return (
     <div className="tree" onContextMenu={(e) => e.preventDefault()}>
-      {groups.map((g) => (
-        <div key={g.root} className="tree-group">
-          <div
-            className="tree-group-head"
-            title={g.root}
-            onClick={() => toggleGroup(g.root)}
-            onContextMenu={(e) => openContextMenu(e, g.root, g.root)}
-          >
-            <span className="tree-icon">{g.expanded ? '▼' : '▶'}</span>
-            <span className="tree-group-name">{g.name}</span>
+      {groups.map((g) => {
+        const fileOnly =
+          g.nodes.length === 1 && !g.nodes[0].entry.isDir && pathsEqual(g.nodes[0].entry.path, g.root)
+        if (fileOnly) {
+          const n = g.nodes[0]
+          const active = activePath ? pathsEqual(n.entry.path, activePath) : false
+          const flash = flashPath ? pathsEqual(n.entry.path, flashPath) : false
+          return (
+            <div key={g.root} className="tree-group">
+              <div
+                className={`tree-row${active ? ' active' : ''}${flash ? ' flash' : ''}`}
+                data-tree-path={n.entry.path}
+                title={g.root}
+                style={{ paddingLeft: 8 }}
+                onClick={() => onOpenFile(n.entry.path)}
+                onContextMenu={(e) => openContextMenu(e, g.root, g.root)}
+              >
+                <span className="tree-icon">{kindIcon(n.entry.kind)}</span>
+                <span className="tree-name">{n.entry.name}</span>
+              </div>
+              {g.error ? (
+                <div style={{ padding: '4px 10px', color: 'var(--ph-danger)', fontSize: 12 }}>{g.error}</div>
+              ) : null}
+            </div>
+          )
+        }
+        return (
+          <div key={g.root} className="tree-group">
+            <div
+              className="tree-group-head"
+              title={g.root}
+              onClick={() => toggleGroup(g.root)}
+              onContextMenu={(e) => openContextMenu(e, g.root, g.root)}
+            >
+              <span className="tree-icon">{g.expanded ? '▼' : '▶'}</span>
+              <span className="tree-group-name">{g.name}</span>
+            </div>
+            {g.expanded ? (
+              <>
+                {g.error ? (
+                  <div style={{ padding: '4px 10px', color: 'var(--ph-danger)', fontSize: 12 }}>{g.error}</div>
+                ) : null}
+                <TreeList
+                  nodes={g.nodes}
+                  depth={1}
+                  activePath={activePath}
+                  flashPath={flashPath}
+                  onToggle={(p) => void toggle(g.root, p)}
+                  onOpen={onOpenFile}
+                  onContextMenu={(e, path) => openContextMenu(e, path, g.root)}
+                />
+              </>
+            ) : null}
           </div>
-          {g.expanded ? (
-            <>
-              {g.error ? <div style={{ padding: '4px 10px', color: 'var(--ph-danger)', fontSize: 12 }}>{g.error}</div> : null}
-              <TreeList
-                nodes={g.nodes}
-                depth={1}
-                activePath={activePath}
-                flashPath={flashPath}
-                onToggle={(p) => void toggle(g.root, p)}
-                onOpen={onOpenFile}
-                onContextMenu={(e, path) => openContextMenu(e, path, g.root)}
-              />
-            </>
-          ) : null}
-        </div>
-      ))}
+        )
+      })}
       {menu ? (
         <div
           className="tree-context-menu"
