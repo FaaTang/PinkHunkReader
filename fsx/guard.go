@@ -116,11 +116,24 @@ func normalizeRoot(root string) (string, error) {
 	if root == "" {
 		return "", nil
 	}
+	root = normalizeDriveLetterPath(root)
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Clean(abs), nil
+}
+
+// normalizeDriveLetterPath turns "D:" into "D:\\" so Windows does not treat it as a relative path.
+func normalizeDriveLetterPath(path string) string {
+	if len(path) == 2 && path[1] == ':' && isDriveLetter(path[0]) {
+		return path + string(filepath.Separator)
+	}
+	return path
+}
+
+func isDriveLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 func underRoot(root, abs string) bool {
@@ -143,6 +156,7 @@ func (g *Guard) Resolve(path string) (string, error) {
 	if path == "" {
 		return g.roots[0], nil
 	}
+	path = normalizeDriveLetterPath(path)
 
 	var abs string
 	var err error

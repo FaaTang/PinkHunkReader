@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ListDir } from '../../wailsjs/go/app/App'
 import type { DirEntry } from '../types'
+import { folderLabel, parentDir, pathUnderRoot, pathsEqual } from '../utils/pathHelpers'
 import './FileTree.css'
 
 interface Props {
@@ -33,31 +34,6 @@ interface ContextMenuState {
   y: number
   rootPath: string
   label: string
-}
-
-function pathsEqual(a: string, b: string): boolean {
-  if (!a || !b) return false
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-  return norm(a) === norm(b)
-}
-
-function folderName(path: string): string {
-  const norm = path.replace(/[\\/]+$/, '')
-  const slash = Math.max(norm.lastIndexOf('\\'), norm.lastIndexOf('/'))
-  return slash >= 0 ? norm.slice(slash + 1) : norm
-}
-
-function parentDir(path: string): string {
-  const slash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
-  return slash >= 0 ? path.slice(0, slash) : path
-}
-
-function pathUnderRoot(filePath: string, rootPath: string): boolean {
-  if (!rootPath) return false
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-  const rootN = norm(rootPath)
-  const fileN = norm(filePath)
-  return fileN === rootN || fileN.startsWith(`${rootN}/`)
 }
 
 /** Prefer the most specific workspace root covering the clicked path. */
@@ -93,7 +69,7 @@ function dirChain(root: string, filePath: string): string[] {
 function emptyGroups(roots: string[]): RootGroup[] {
   return roots.map((root) => ({
     root,
-    name: folderName(root),
+    name: folderLabel(root),
     expanded: true,
     nodes: [],
     error: '',
@@ -125,7 +101,7 @@ export function FileTree({
           : entries.map((e) => ({ entry: e }))
         next.push({
           root,
-          name: folderName(root),
+          name: folderLabel(root),
           expanded: prev?.expanded ?? true,
           nodes,
           error: '',
@@ -133,7 +109,7 @@ export function FileTree({
       } catch (e) {
         next.push({
           root,
-          name: folderName(root),
+          name: folderLabel(root),
           expanded: prev?.expanded ?? true,
           nodes: prev?.nodes ?? [],
           error: String(e),
@@ -204,7 +180,7 @@ export function FileTree({
           const el = document.querySelector(`[data-tree-path="${cssEscape(revealPath)}"]`)
           el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
         }, 40)
-        onRevealResult?.(true, `Located ${folderName(revealPath)}`)
+        onRevealResult?.(true, `Located ${folderLabel(revealPath)}`)
         window.setTimeout(() => {
           if (!cancelled) setFlashPath((p) => (pathsEqual(p ?? '', revealPath) ? null : p))
         }, 1600)
@@ -226,7 +202,7 @@ export function FileTree({
       x: e.clientX,
       y: e.clientY,
       rootPath,
-      label: folderName(rootPath),
+      label: folderLabel(rootPath),
     })
   }
 

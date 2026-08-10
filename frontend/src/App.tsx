@@ -26,6 +26,13 @@ import { eventMatchesShortcut, formatShortcut } from './settings/shortcuts'
 import type { FileInfo, OpenTab } from './types'
 import { isJsonTab, toggleJsonFormat } from './utils/jsonFormat'
 import {
+  folderLabel,
+  normalizePath,
+  parentDir,
+  pathUnderRoot,
+  pathsEqual,
+} from './utils/pathHelpers'
+import {
   AddRoot,
   ConfirmQuit,
   GetLaunchInfo,
@@ -46,33 +53,6 @@ import {
 } from '../wailsjs/go/app/App'
 import { define } from '../wailsjs/go/models'
 import { EventsOn } from '../wailsjs/runtime/runtime'
-
-function parentDir(path: string): string {
-  const slash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
-  return slash >= 0 ? path.slice(0, slash) : path
-}
-
-function folderLabel(path: string): string {
-  const norm = path.replace(/[\\/]+$/, '')
-  const slash = Math.max(norm.lastIndexOf('\\'), norm.lastIndexOf('/'))
-  return slash >= 0 ? norm.slice(slash + 1) : norm
-}
-
-function normPath(p: string): string {
-  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-}
-
-function pathsEqual(a: string, b: string): boolean {
-  if (!a || !b) return false
-  return normPath(a) === normPath(b)
-}
-
-function pathUnderRoot(filePath: string, rootPath: string): boolean {
-  if (!rootPath) return false
-  const rootN = normPath(rootPath)
-  const fileN = normPath(filePath)
-  return fileN === rootN || fileN.startsWith(`${rootN}/`)
-}
 
 function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
@@ -148,7 +128,7 @@ function AppShell() {
   }, [])
 
   const ensureRoot = useCallback(async (path: string) => {
-    const abs = path.trim()
+    const abs = normalizePath(path.trim())
     if (!abs) return
     if (rootsRef.current.some((r) => pathsEqual(r, abs))) {
       setTreeRefresh((n) => n + 1)
