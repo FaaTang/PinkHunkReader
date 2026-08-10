@@ -48,6 +48,31 @@
   color: var(--ph-accent);
 }
 
+.tab-locate {
+  border: none;
+  background: transparent;
+  color: var(--ph-fg-4);
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.tab:hover .tab-locate,
+.tab.active .tab-locate {
+  opacity: 1;
+}
+
+.tab-locate:hover {
+  color: var(--ph-accent-2);
+  background: var(--ph-bg-hover);
+}
+
 .tab-close {
   border: none;
   background: transparent;

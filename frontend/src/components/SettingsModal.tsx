@@ -8,7 +8,14 @@ import {
 } from '../settings/shortcuts'
 import { MAX_RECENT_MAX, MIN_RECENT_MAX } from '../settings/recentFiles'
 import type { useAppUpdateManager } from '../hooks/useAppUpdateManager'
-import { GetGlobalProxyConfig, SaveGlobalProxy } from '../../wailsjs/go/app/App'
+import { GetGlobalProxyConfig, GetOpenPlacementPrefs, SaveGlobalProxy, SaveOpenPlacementPrefs } from '../../wailsjs/go/app/App'
+import {
+  DEFAULT_OPEN_PLACEMENT,
+  normalizeOpenPlacement,
+  type OpenPlacementMode,
+  type OpenPlacementPrefs,
+  type OpenPlacementTarget,
+} from '../settings/openPlacement'
 import './GoToDialog.css'
 import './SettingsModal.css'
 
@@ -81,6 +88,8 @@ export function SettingsModal({ update }: Props) {
   const [proxyBusy, setProxyBusy] = useState(false)
   const [proxyError, setProxyError] = useState('')
   const [proxyStatus, setProxyStatus] = useState('')
+  const [openPlacement, setOpenPlacement] = useState<OpenPlacementPrefs>(DEFAULT_OPEN_PLACEMENT)
+  const [openPlacementStatus, setOpenPlacementStatus] = useState('')
 
   useEffect(() => {
     if (!settingsOpen) setCapturing(null)
@@ -95,6 +104,36 @@ export function SettingsModal({ update }: Props) {
       void update?.refreshAppInfo()
     }
   }, [settingsOpen, settingsSection, update])
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== 'general') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const prefs = normalizeOpenPlacement(await GetOpenPlacementPrefs())
+        if (!cancelled) {
+          setOpenPlacement(prefs)
+          setOpenPlacementStatus('')
+        }
+      } catch (e) {
+        if (!cancelled) setOpenPlacementStatus(String(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [settingsOpen, settingsSection])
+
+  const applyOpenPlacement = async (next: OpenPlacementPrefs) => {
+    setOpenPlacement(next)
+    setOpenPlacementStatus('')
+    try {
+      const saved = normalizeOpenPlacement(await SaveOpenPlacementPrefs(next))
+      setOpenPlacement(saved)
+    } catch (e) {
+      setOpenPlacementStatus(String(e))
+    }
+  }
 
   useEffect(() => {
     if (!settingsOpen || settingsSection !== 'proxy') return
@@ -310,6 +349,55 @@ export function SettingsModal({ update }: Props) {
                       Clear list
                     </button>
                   </div>
+                  <div className="settings-row">
+                    <span className="settings-row-label">
+                      Open in
+                      <span className="settings-row-sub">
+                        When continuing to open files or folders
+                      </span>
+                    </span>
+                    <select
+                      className="settings-select"
+                      value={openPlacement.target}
+                      onChange={(e) =>
+                        void applyOpenPlacement({
+                          ...openPlacement,
+                          target: e.target.value as OpenPlacementTarget,
+                        })
+                      }
+                      aria-label="Open in"
+                    >
+                      <option value="current">Current window</option>
+                      <option value="new">New window</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-label">
+                      When already open
+                      <span className="settings-row-sub">
+                        Ask each time, or always use the preference above
+                      </span>
+                    </span>
+                    <select
+                      className="settings-select"
+                      value={openPlacement.mode}
+                      onChange={(e) =>
+                        void applyOpenPlacement({
+                          ...openPlacement,
+                          mode: e.target.value as OpenPlacementMode,
+                        })
+                      }
+                      aria-label="When already open"
+                    >
+                      <option value="ask">Ask every time</option>
+                      <option value="always">Always use preference</option>
+                    </select>
+                  </div>
+                  {openPlacementStatus ? (
+                    <div className="settings-hint" style={{ color: 'var(--ph-danger)' }}>
+                      {openPlacementStatus}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="settings-actions">
                   <span style={{ flex: 1 }} />

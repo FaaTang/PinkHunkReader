@@ -22,6 +22,9 @@ type App struct {
 
 	updateMu    sync.Mutex
 	updateState updateState
+
+	windowID string
+	launch   launchOptions
 }
 
 func NewApp() *App {
@@ -31,6 +34,11 @@ func NewApp() *App {
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 	a.loadPersistedGlobalProxy()
+	opts := parseLaunchArgs(os.Args[1:])
+	a.launch = a.resolveLaunch(opts)
+	if a.launch.WindowID != "" {
+		_ = a.RegisterWindow(a.launch.WindowID)
+	}
 }
 
 // BeforeClose is called when the user tries to close the window.
@@ -51,15 +59,23 @@ func (a *App) BeforeClose(ctx context.Context) (prevent bool) {
 
 // ConfirmQuit allows the next close/quit to proceed.
 func (a *App) ConfirmQuit() {
+	if a.windowID != "" {
+		_ = a.UnregisterWindow(a.windowID)
+	}
 	a.quitMu.Lock()
 	a.quitConfirmed = true
 	a.quitMu.Unlock()
 	runtime.Quit(a.ctx)
 }
 
-// OpenRoot sets the workspace root directory.
+// OpenRoot replaces workspace roots with a single root directory.
 func (a *App) OpenRoot(path string) error {
-	g, err := fsx.NewGuard(path)
+	return a.SetRoots([]string{path})
+}
+
+// SetRoots replaces all workspace roots.
+func (a *App) SetRoots(paths []string) error {
+	g, err := fsx.NewMultiGuard(paths)
 	if err != nil {
 		return err
 	}
@@ -67,7 +83,35 @@ func (a *App) OpenRoot(path string) error {
 	return nil
 }
 
-// PickAndOpenFolder opens a native folder dialog and sets root.
+// AddRoot appends a workspace root without removing existing ones.
+func (a *App) AddRoot(path string) error {
+	if a.guard == nil {
+		return a.OpenRoot(path)
+	}
+	return a.guard.AddRoot(path)
+}
+
+// RemoveRoot removes one workspace root.
+func (a *App) RemoveRoot(path string) error {
+	if a.guard == nil {
+		return nil
+	}
+	return a.guard.RemoveRoot(path)
+}
+
+// GetRoots returns all workspace roots.
+func (a *App) GetRoots() []string {
+	if a.guard == nil {
+		return []string{}
+	}
+	roots := a.guard.Roots()
+	if roots == nil {
+		return []string{}
+	}
+	return roots
+}
+
+// PickAndOpenFolder opens a native folder dialog and returns the path (does not change roots).
 func (a *App) PickAndOpenFolder() (string, error) {
 	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Open Folder",
@@ -75,17 +119,10 @@ func (a *App) PickAndOpenFolder() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if path == "" {
-		return "", nil
-	}
-	if err := a.OpenRoot(path); err != nil {
-		return "", err
-	}
 	return path, nil
 }
 
-// PickAndOpenFile opens a native file dialog, sets the workspace root to the
-// file's parent directory, and returns the selected file path.
+// PickAndOpenFile opens a native file dialog and returns the selected file path (does not change roots).
 func (a *App) PickAndOpenFile() (string, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Open File",
@@ -93,18 +130,12 @@ func (a *App) PickAndOpenFile() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if path == "" {
-		return "", nil
-	}
-	parent := filepath.Dir(path)
-	if err := a.OpenRoot(parent); err != nil {
-		return "", err
-	}
 	return path, nil
 }
 
 // PickAndOpen opens a modern native file or folder dialog (mode: "file" | "folder").
 // Windows file dialogs require a file; use mode "folder" to open a directory alone.
+// Does not change workspace roots — the frontend decides current vs new window.
 func (a *App) PickAndOpen(mode string) (define.PickOpenResult, error) {
 	empty := define.PickOpenResult{}
 	var path string
@@ -135,20 +166,13 @@ func (a *App) finishPickOpen(path string) (define.PickOpenResult, error) {
 		return empty, err
 	}
 	if info.IsDir() {
-		if err := a.OpenRoot(path); err != nil {
-			return empty, err
-		}
 		return define.PickOpenResult{Path: path, IsDir: true}, nil
-	}
-	parent := filepath.Dir(path)
-	if err := a.OpenRoot(parent); err != nil {
-		return empty, err
 	}
 	return define.PickOpenResult{Path: path, IsDir: false}, nil
 }
 
-// PickAndSaveFile opens a save dialog, sets workspace root to the file's parent,
-// and returns the chosen path (empty if cancelled).
+// PickAndSaveFile opens a save dialog and returns the chosen path (empty if cancelled).
+// Adds the file parent as a workspace root when needed so the save can proceed.
 func (a *App) PickAndSaveFile(defaultFilename string) (string, error) {
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           "Save As",
@@ -161,13 +185,13 @@ func (a *App) PickAndSaveFile(defaultFilename string) (string, error) {
 		return "", nil
 	}
 	parent := filepath.Dir(path)
-	if err := a.OpenRoot(parent); err != nil {
+	if err := a.AddRoot(parent); err != nil {
 		return "", err
 	}
 	return path, nil
 }
 
-// GetRoot returns the current workspace root.
+// GetRoot returns the first workspace root (back-compat).
 func (a *App) GetRoot() string {
 	if a.guard == nil {
 		return ""
@@ -177,7 +201,7 @@ func (a *App) GetRoot() string {
 
 // ListDir lists directory entries under the workspace.
 func (a *App) ListDir(path string) ([]define.DirEntry, error) {
-	if a.guard == nil {
+	if a.guard == nil || len(a.guard.Roots()) == 0 {
 		return nil, errNoRoot()
 	}
 	if path == "" {

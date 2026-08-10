@@ -6,6 +6,7 @@ import { CloseSaveDialog, type CloseSaveChoice } from './components/CloseSaveDia
 import { FileTree } from './components/FileTree'
 import { GoToDialog } from './components/GoToDialog'
 import { OpenMenu } from './components/OpenMenu'
+import { OpenPlacementDialog, type OpenPlacementChoice } from './components/OpenPlacementDialog'
 import { SettingsModal } from './components/SettingsModal'
 import { UpdateProgressDialog } from './components/UpdateProgressDialog'
 import { useAppUpdateManager } from './hooks/useAppUpdateManager'
@@ -13,20 +14,37 @@ import { TabBar } from './components/TabBar'
 import { ViewerHost } from './components/ViewerHost'
 import { useAppFullscreen } from './hooks/useAppFullscreen'
 import { AppSettingsProvider, useAppSettings } from './settings/AppSettingsContext'
-import { buildSession, loadSession, saveSession } from './settings/session'
+import {
+  buildSession,
+  clearLegacyLocalSession,
+  loadLegacyLocalSession,
+  type SessionState,
+  type SessionTab,
+} from './settings/session'
+import { normalizeOpenPlacement, DEFAULT_OPEN_PLACEMENT } from './settings/openPlacement'
 import { eventMatchesShortcut, formatShortcut } from './settings/shortcuts'
 import type { FileInfo, OpenTab } from './types'
 import { isJsonTab, toggleJsonFormat } from './utils/jsonFormat'
 import {
+  AddRoot,
   ConfirmQuit,
-  GetRoot,
-  OpenRoot,
+  GetLaunchInfo,
+  GetOpenPlacementPrefs,
+  GetRoots,
+  LoadWindowSession,
   PickAndOpen,
   PickAndSaveFile,
   ReadText,
+  RemoveRoot,
+  SaveOpenPlacementPrefs,
+  SaveWindowSession,
+  SetRoots,
+  SpawnNewWindow,
+  SpawnRestoredWindows,
   StatFile,
   WriteText,
 } from '../wailsjs/go/app/App'
+import { define } from '../wailsjs/go/models'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 
 function parentDir(path: string): string {
@@ -34,22 +52,43 @@ function parentDir(path: string): string {
   return slash >= 0 ? path.slice(0, slash) : path
 }
 
+function folderLabel(path: string): string {
+  const norm = path.replace(/[\\/]+$/, '')
+  const slash = Math.max(norm.lastIndexOf('\\'), norm.lastIndexOf('/'))
+  return slash >= 0 ? norm.slice(slash + 1) : norm
+}
+
+function normPath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+function pathsEqual(a: string, b: string): boolean {
+  if (!a || !b) return false
+  return normPath(a) === normPath(b)
+}
+
 function pathUnderRoot(filePath: string, rootPath: string): boolean {
   if (!rootPath) return false
-  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-  const rootN = norm(rootPath)
-  const fileN = norm(filePath)
+  const rootN = normPath(rootPath)
+  const fileN = normPath(filePath)
   return fileN === rootN || fileN.startsWith(`${rootN}/`)
 }
 
+function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
+  return roots.some((r) => pathUnderRoot(filePath, r))
+}
+
 function AppShell() {
-  const [root, setRoot] = useState('')
+  const [roots, setRoots] = useState<string[]>([])
+  const [windowId, setWindowId] = useState('')
   const [tabs, setTabs] = useState<OpenTab[]>([])
   const [activePath, setActivePath] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('Open a folder or file to start')
   const [saving, setSaving] = useState(false)
   const [treeRefresh, setTreeRefresh] = useState(0)
+  const [revealPath, setRevealPath] = useState<string | null>(null)
+  const [revealNonce, setRevealNonce] = useState(0)
   const [untitledSeq, setUntitledSeq] = useState(1)
   const [sessionReady, setSessionReady] = useState(false)
   const [closePrompt, setClosePrompt] = useState<{
@@ -58,17 +97,25 @@ function AppShell() {
     remaining: number
     mode: 'tab' | 'quit'
   } | null>(null)
+  const [placementPrompt, setPlacementPrompt] = useState<{
+    pathLabel: string
+    defaultTarget: OpenPlacementChoice
+  } | null>(null)
+
   const pagedSaveRef = useRef<(() => Promise<void>) | null>(null)
   const tabsRef = useRef(tabs)
   const activePathRef = useRef(activePath)
-  const rootRef = useRef(root)
+  const rootsRef = useRef(roots)
+  const windowIdRef = useRef(windowId)
   const untitledSeqRef = useRef(untitledSeq)
   const closeResolverRef = useRef<((c: CloseSaveChoice) => void) | null>(null)
+  const placementResolverRef = useRef<((c: OpenPlacementChoice | 'cancel') => void) | null>(null)
   const quittingRef = useRef(false)
 
   tabsRef.current = tabs
   activePathRef.current = activePath
-  rootRef.current = root
+  rootsRef.current = roots
+  windowIdRef.current = windowId
   untitledSeqRef.current = untitledSeq
 
   const { fullscreen, toggle: toggleFullscreen, exit: exitFullscreen } = useAppFullscreen()
@@ -91,25 +138,78 @@ function AppShell() {
     [tabs, activePath],
   )
 
+  const syncRootsFromBackend = useCallback(async () => {
+    try {
+      const next = await GetRoots()
+      setRoots(Array.isArray(next) ? next : [])
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const ensureRoot = useCallback(async (path: string) => {
+    const abs = path.trim()
+    if (!abs) return
+    if (rootsRef.current.some((r) => pathsEqual(r, abs))) {
+      setTreeRefresh((n) => n + 1)
+      return
+    }
+    await AddRoot(abs)
+    setRoots((prev) => (prev.some((r) => pathsEqual(r, abs)) ? prev : [...prev, abs]))
+    setStatus(abs)
+    setTreeRefresh((n) => n + 1)
+  }, [])
+
   const persistSession = useCallback(() => {
-    saveSession(buildSession(
-      rootRef.current,
+    const id = windowIdRef.current
+    if (!id) return
+    const state = buildSession(
+      id,
+      rootsRef.current,
       activePathRef.current,
       tabsRef.current,
       untitledSeqRef.current,
-    ))
+    )
+    void SaveWindowSession(define.WindowSessionState.createFrom({
+      version: state.version,
+      windowId: state.windowId,
+      roots: state.roots,
+      activePath: state.activePath ?? '',
+      untitledSeq: state.untitledSeq,
+      tabs: state.tabs.map((t) => ({
+        path: t.path,
+        name: t.name,
+        kind: t.kind,
+        editable: t.editable,
+        largeMode: t.largeMode,
+        size: t.size,
+        dirty: t.dirty,
+        untitled: Boolean(t.untitled),
+        languageHint: t.languageHint ?? '',
+        content: t.content ?? '',
+      })),
+    })).catch(() => {
+      /* ignore persist errors */
+    })
   }, [])
 
   useEffect(() => {
     if (!sessionReady) return
     const t = window.setTimeout(() => persistSession(), 200)
     return () => window.clearTimeout(t)
-  }, [tabs, activePath, root, untitledSeq, sessionReady, persistSession])
+  }, [tabs, activePath, roots, untitledSeq, sessionReady, persistSession])
 
   const askCloseSave = useCallback((tab: OpenTab, remaining: number, mode: 'tab' | 'quit') => {
     return new Promise<CloseSaveChoice>((resolve) => {
       closeResolverRef.current = resolve
       setClosePrompt({ path: tab.path, name: tab.name, remaining, mode })
+    })
+  }, [])
+
+  const askOpenPlacement = useCallback((pathLabel: string, defaultTarget: OpenPlacementChoice) => {
+    return new Promise<OpenPlacementChoice | 'cancel'>((resolve) => {
+      placementResolverRef.current = resolve
+      setPlacementPrompt({ pathLabel, defaultTarget })
     })
   }, [])
 
@@ -122,7 +222,6 @@ function AppShell() {
       let content = ''
 
       if (info.kind === 'pdf' || info.kind === 'image' || info.kind === 'word' || info.kind === 'excel') {
-        // filled by viewer via ReadBytes
         setStatus(`${info.name} · ${(info.size / 1024).toFixed(1)} KB`)
       } else if (info.largeMode) {
         setStatus(`${info.name} · paged (viewport × 2)`)
@@ -159,83 +258,30 @@ function AppShell() {
     }
   }, [rememberRecent])
 
-  // Restore last session (Notepad++-style: tabs not actively closed come back).
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const session = loadSession()
-      if (!session || !session.tabs.length) {
-        if (!cancelled) setSessionReady(true)
-        return
+  const restoreTabsFromSession = useCallback(async (session: SessionState, cancelled: () => boolean) => {
+    const restored: OpenTab[] = []
+    const hasRoots = session.roots.length > 0
+    for (const st of session.tabs) {
+      if (cancelled()) return []
+      if (st.untitled) {
+        restored.push({
+          path: st.path,
+          name: st.name,
+          kind: st.kind || 'text',
+          editable: true,
+          largeMode: false,
+          size: st.content?.length ?? 0,
+          content: st.content ?? '',
+          dirty: Boolean(st.dirty || (st.content ?? '').length > 0),
+          untitled: true,
+          languageHint: st.languageHint,
+        })
+        continue
       }
-      try {
-        if (session.root) {
-          await OpenRoot(session.root)
-          if (!cancelled) {
-            setRoot(session.root)
-            setStatus(session.root)
-          }
-        }
-        if (!cancelled) setUntitledSeq(Math.max(1, session.untitledSeq || 1))
-
-        const restored: OpenTab[] = []
-        for (const st of session.tabs) {
-          if (cancelled) return
-          if (st.untitled) {
-            restored.push({
-              path: st.path,
-              name: st.name,
-              kind: st.kind || 'text',
-              editable: true,
-              largeMode: false,
-              size: st.content?.length ?? 0,
-              content: st.content ?? '',
-              dirty: Boolean(st.dirty || (st.content ?? '').length > 0),
-              untitled: true,
-              languageHint: st.languageHint,
-            })
-            continue
-          }
-          if (st.largeMode || st.kind === 'pdf' || st.kind === 'image' || st.kind === 'word' || st.kind === 'excel') {
-            try {
-              if (session.root) {
-                const info = await StatFile(st.path)
-                restored.push({
-                  path: info.path,
-                  name: info.name,
-                  kind: info.kind,
-                  editable: info.editable,
-                  largeMode: info.largeMode,
-                  size: info.size,
-                  content: '',
-                  dirty: false,
-                })
-              }
-            } catch {
-              /* missing file — skip */
-            }
-            continue
-          }
-          if (typeof st.content === 'string' && (st.dirty || st.content.length >= 0)) {
-            restored.push({
-              path: st.path,
-              name: st.name,
-              kind: st.kind,
-              editable: st.editable,
-              largeMode: false,
-              size: st.size,
-              content: st.content,
-              dirty: st.dirty,
-              languageHint: st.languageHint,
-            })
-            continue
-          }
-          try {
-            if (!session.root) continue
+      if (st.largeMode || st.kind === 'pdf' || st.kind === 'image' || st.kind === 'word' || st.kind === 'excel') {
+        try {
+          if (hasRoots) {
             const info = await StatFile(st.path)
-            const content = (info.editable || info.kind === 'markdown' || info.kind === 'text') && !info.largeMode
-              ? await ReadText(st.path)
-              : ''
             restored.push({
               path: info.path,
               name: info.name,
@@ -243,18 +289,112 @@ function AppShell() {
               editable: info.editable,
               largeMode: info.largeMode,
               size: info.size,
-              content,
+              content: '',
               dirty: false,
             })
-          } catch {
-            /* skip */
           }
+        } catch {
+          /* missing file — skip */
         }
-        if (!cancelled && restored.length) {
-          setTabs(restored)
-          const active = restored.find((t) => t.path === session.activePath)?.path ?? restored[0].path
-          setActivePath(active)
-          setStatus(`Restored ${restored.length} tab${restored.length === 1 ? '' : 's'}`)
+        continue
+      }
+      if (typeof st.content === 'string') {
+        restored.push({
+          path: st.path,
+          name: st.name,
+          kind: st.kind,
+          editable: st.editable,
+          largeMode: false,
+          size: st.size,
+          content: st.content,
+          dirty: st.dirty,
+          languageHint: st.languageHint,
+        })
+        continue
+      }
+      try {
+        if (!hasRoots) continue
+        const info = await StatFile(st.path)
+        const content = (info.editable || info.kind === 'markdown' || info.kind === 'text') && !info.largeMode
+          ? await ReadText(st.path)
+          : ''
+        restored.push({
+          path: info.path,
+          name: info.name,
+          kind: info.kind,
+          editable: info.editable,
+          largeMode: info.largeMode,
+          size: info.size,
+          content,
+          dirty: false,
+        })
+      } catch {
+        /* skip */
+      }
+    }
+    return restored
+  }, [])
+
+  const applySessionState = useCallback(async (session: SessionState, cancelled: () => boolean) => {
+    if (session.roots.length) {
+      await SetRoots(session.roots)
+      if (cancelled()) return
+      setRoots(session.roots)
+      setStatus(session.roots.join(' · '))
+    }
+    if (!cancelled()) setUntitledSeq(Math.max(1, session.untitledSeq || 1))
+    const restored = await restoreTabsFromSession(session, cancelled)
+    if (cancelled() || !restored.length) return
+    setTabs(restored)
+    const active = restored.find((t) => t.path === session.activePath)?.path ?? restored[0].path
+    setActivePath(active)
+    setStatus(`Restored ${restored.length} tab${restored.length === 1 ? '' : 's'}`)
+  }, [restoreTabsFromSession])
+
+  // Launch: window id, crash restore, CLI open, legacy migration.
+  useEffect(() => {
+    let cancelled = false
+    const isCancelled = () => cancelled
+    ;(async () => {
+      try {
+        const launch = await GetLaunchInfo()
+        if (cancelled) return
+        const id = String(launch?.windowId || '').trim()
+        if (id) setWindowId(id)
+        try {
+          await SpawnRestoredWindows()
+        } catch {
+          /* sibling spawn best-effort */
+        }
+        if (cancelled) return
+
+        if (launch?.shouldRestore && id) {
+          const raw = await LoadWindowSession(id)
+          const session: SessionState = {
+            version: 2,
+            windowId: id,
+            roots: Array.isArray(raw?.roots) ? raw.roots.filter(Boolean) : [],
+            activePath: raw?.activePath || null,
+            untitledSeq: raw?.untitledSeq || 1,
+            tabs: (raw?.tabs ?? []) as SessionTab[],
+          }
+          if (session.roots.length || session.tabs.length) {
+            await applySessionState(session, isCancelled)
+          }
+        } else if (launch?.openPath) {
+          if (launch.openIsDir) {
+            await ensureRoot(launch.openPath)
+          } else {
+            await ensureRoot(parentDir(launch.openPath))
+            if (!cancelled) await openFile(launch.openPath)
+          }
+        } else {
+          const legacy = loadLegacyLocalSession()
+          if (legacy && (legacy.roots.length || legacy.tabs.length)) {
+            const migrated = { ...legacy, windowId: id || legacy.windowId }
+            await applySessionState(migrated, isCancelled)
+            clearLegacyLocalSession()
+          }
         }
       } catch (e) {
         if (!cancelled) setError(String(e))
@@ -265,52 +405,62 @@ function AppShell() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [applySessionState, ensureRoot, openFile])
+
+  const resolveOpenPlacement = useCallback(async (pathLabel: string): Promise<OpenPlacementChoice | 'cancel'> => {
+    if (rootsRef.current.length === 0) return 'current'
+    let prefs = normalizeOpenPlacement(DEFAULT_OPEN_PLACEMENT)
+    try {
+      prefs = normalizeOpenPlacement(await GetOpenPlacementPrefs())
+    } catch {
+      /* defaults */
+    }
+    if (prefs.mode === 'always') return prefs.target
+    return askOpenPlacement(pathLabel, prefs.target)
+  }, [askOpenPlacement])
+
+  const openPathInPlacement = useCallback(async (path: string, isDir: boolean) => {
+    const label = isDir ? folderLabel(path) : path.split(/[/\\]/).pop() || path
+    const choice = await resolveOpenPlacement(label)
+    if (choice === 'cancel') return
+    if (choice === 'new') {
+      await SpawnNewWindow(path, isDir)
+      setStatus(`Opened in new window · ${label}`)
+      return
+    }
+    if (isDir) {
+      await ensureRoot(path)
+      return
+    }
+    if (!pathUnderAnyRoot(path, rootsRef.current)) {
+      await ensureRoot(parentDir(path))
+    }
+    await openFile(path)
+  }, [ensureRoot, openFile, resolveOpenPlacement])
 
   const openPicked = useCallback(async (mode: 'file' | 'folder') => {
     setError('')
     try {
       const picked = await PickAndOpen(mode)
       if (!picked?.path) return
-      if (picked.isDir) {
-        setRoot(picked.path)
-        setStatus(picked.path)
-        setTreeRefresh((n) => n + 1)
-        return
-      }
-      const parent = parentDir(picked.path)
-      setRoot(parent)
-      setStatus(parent)
-      setTreeRefresh((n) => n + 1)
-      await openFile(picked.path)
+      await openPathInPlacement(picked.path, Boolean(picked.isDir))
     } catch (e) {
       setError(String(e))
     }
-  }, [openFile])
+  }, [openPathInPlacement])
 
   const openRecent = useCallback(async (path: string) => {
     setError('')
     try {
-      let currentRoot = root
-      try {
-        currentRoot = (await GetRoot()) || root
-      } catch {
-        /* ignore */
-      }
-      if (!pathUnderRoot(path, currentRoot)) {
-        const parent = parentDir(path)
-        await OpenRoot(parent)
-        setRoot(parent)
-        setStatus(parent)
-        setTreeRefresh((n) => n + 1)
+      if (pathUnderAnyRoot(path, rootsRef.current)) {
         await openFile(path)
         return
       }
-      await openFile(path)
+      await openPathInPlacement(path, false)
     } catch (e) {
       setError(String(e))
     }
-  }, [openFile, root])
+  }, [openFile, openPathInPlacement])
 
   const newFile = useCallback(() => {
     const n = untitledSeqRef.current
@@ -362,7 +512,7 @@ function AppShell() {
         if (!dest) return false
         await WriteText(dest, tab.content)
         const info = await StatFile(dest)
-        setRoot(parentDir(info.path))
+        await syncRootsFromBackend()
         setTabs((prev) =>
           prev.map((t) =>
             t.path === tab.path
@@ -408,7 +558,7 @@ function AppShell() {
     } finally {
       setSaving(false)
     }
-  }, [rememberRecent])
+  }, [rememberRecent, syncRootsFromBackend])
 
   const saveActive = useCallback(async () => {
     if (!activeTab || !activeTab.editable) return
@@ -439,6 +589,48 @@ function AppShell() {
     removeTab(path)
   }, [askCloseSave, removeTab, saveTab])
 
+  const removeFromWorkspace = useCallback(async (rootPath: string) => {
+    setError('')
+    const target = rootsRef.current.find((r) => pathsEqual(r, rootPath)) ?? rootPath
+    const remainingRoots = rootsRef.current.filter((r) => !pathsEqual(r, target))
+    const affected = tabsRef.current.filter((t) => {
+      if (t.untitled) return false
+      if (!pathUnderRoot(t.path, target)) return false
+      // Keep tabs still covered by another remaining root.
+      return !pathUnderAnyRoot(t.path, remainingRoots)
+    })
+    const dirty = affected.filter((t) => t.dirty && t.editable)
+    for (let i = 0; i < dirty.length; i++) {
+      const tab = dirty[i]
+      const choice = await askCloseSave(tab, dirty.length - i - 1, 'tab')
+      if (choice === 'cancel') return
+      if (choice === 'save') {
+        const ok = await saveTab(tab)
+        if (!ok) return
+      }
+    }
+    try {
+      await RemoveRoot(target)
+      const drop = new Set(affected.map((t) => t.path))
+      setTabs((prev) => {
+        const next = prev.filter((t) => !drop.has(t.path))
+        if (activePathRef.current && drop.has(activePathRef.current)) {
+          setActivePath(next.length ? next[next.length - 1].path : null)
+        }
+        return next
+      })
+      setRoots(remainingRoots)
+      setTreeRefresh((n) => n + 1)
+      setStatus(
+        remainingRoots.length
+          ? `Removed ${folderLabel(target)} from workspace`
+          : 'No workspace',
+      )
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [askCloseSave, saveTab])
+
   const formatActiveJson = useCallback(() => {
     const tab = activeTab
     if (!tab?.editable || tab.largeMode || !activePath) return
@@ -462,6 +654,17 @@ function AppShell() {
     if (path === activePath) return
     setActivePath(path)
   }, [activePath])
+
+  const locateInExplorer = useCallback((path: string) => {
+    if (!path || path.startsWith('untitled:')) return
+    if (!pathUnderAnyRoot(path, rootsRef.current)) {
+      setStatus('File is not in the current workspace')
+      return
+    }
+    setActivePath(path)
+    setRevealPath(path)
+    setRevealNonce((n) => n + 1)
+  }, [])
 
   const refreshWorkspace = useCallback(async () => {
     setError('')
@@ -498,6 +701,25 @@ function AppShell() {
     closeResolverRef.current = null
     setClosePrompt(null)
     resolve?.(choice)
+  }, [])
+
+  const handlePlacementChoice = useCallback((choice: OpenPlacementChoice, always: boolean) => {
+    const resolve = placementResolverRef.current
+    placementResolverRef.current = null
+    setPlacementPrompt(null)
+    if (always) {
+      void SaveOpenPlacementPrefs({ target: choice, mode: 'always' }).catch(() => {
+        /* ignore */
+      })
+    }
+    resolve?.(choice)
+  }, [])
+
+  const handlePlacementCancel = useCallback(() => {
+    const resolve = placementResolverRef.current
+    placementResolverRef.current = null
+    setPlacementPrompt(null)
+    resolve?.('cancel')
   }, [])
 
   const handleQuitRequested = useCallback(async () => {
@@ -544,7 +766,7 @@ function AppShell() {
       const typing =
         tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable
 
-      if (closePrompt) return
+      if (closePrompt || placementPrompt) return
 
       if (goToOpen || settingsOpen) {
         if (eventMatchesShortcut(e, shortcuts.exitFullscreen) && fullscreen && !typing) {
@@ -634,9 +856,17 @@ function AppShell() {
     settingsOpen,
     goToTarget,
     closePrompt,
+    placementPrompt,
   ])
 
-  const hasWorkspace = Boolean(root) || tabs.length > 0
+  const hasWorkspace = roots.length > 0 || tabs.length > 0
+  const rootsSummary = roots.length
+    ? roots.map(folderLabel).join(' · ')
+    : 'No workspace'
+  const locatablePaths = useMemo(
+    () => tabs.filter((t) => !t.untitled && pathUnderAnyRoot(t.path, roots)).map((t) => t.path),
+    [tabs, roots],
+  )
   const showJsonFormat =
     Boolean(activeTab?.editable)
     && !activeTab?.largeMode
@@ -688,7 +918,7 @@ function AppShell() {
         >
           Settings
         </button>
-        <div className="root-path" title={root}>{root || 'No workspace'}</div>
+        <div className="root-path" title={roots.join('\n')}>{rootsSummary}</div>
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -701,18 +931,26 @@ function AppShell() {
               type="button"
               className="sidebar-refresh"
               title="Refresh"
-              disabled={!root}
+              disabled={!roots.length}
               onClick={() => void refreshWorkspace()}
             >
               ↻
             </button>
           </div>
-          {root ? (
+          {roots.length ? (
             <FileTree
-              root={root}
+              roots={roots}
               refreshToken={treeRefresh}
               activePath={activePath}
+              revealPath={revealPath}
+              revealNonce={revealNonce}
               onOpenFile={(p) => void openFile(p)}
+              onRemoveFromWorkspace={(p) => void removeFromWorkspace(p)}
+              onRevealResult={(ok, message) => {
+                setStatus(message)
+                if (!ok) setError(message)
+                else setError('')
+              }}
             />
           ) : (
             <div className="empty" style={{ padding: 16, fontSize: 12 }}>
@@ -739,8 +977,10 @@ function AppShell() {
               <TabBar
                 tabs={tabs}
                 activePath={activePath}
+                locatablePaths={locatablePaths}
                 onSelect={selectTab}
                 onClose={(p) => void closeTab(p)}
+                onLocate={locateInExplorer}
               />
               {activeTab ? (
                 <ViewerHost
@@ -782,6 +1022,13 @@ function AppShell() {
         fileName={closePrompt?.name ?? ''}
         remaining={closePrompt?.remaining ?? 0}
         onChoice={handleClosePrompt}
+      />
+      <OpenPlacementDialog
+        open={Boolean(placementPrompt)}
+        pathLabel={placementPrompt?.pathLabel ?? ''}
+        defaultTarget={placementPrompt?.defaultTarget ?? 'current'}
+        onChoice={handlePlacementChoice}
+        onCancel={handlePlacementCancel}
       />
       <SettingsModal update={update} />
       <UpdateProgressDialog

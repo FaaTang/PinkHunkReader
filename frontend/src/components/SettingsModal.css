@@ -104,6 +104,17 @@
   font-family: var(--ph-font-mono, ui-monospace, monospace);
 }
 
+.settings-select {
+  min-width: 160px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--ph-br-2);
+  border-radius: 6px;
+  background: var(--ph-bg-panel);
+  color: var(--ph-fg-1);
+  font-size: 13px;
+}
+
 .settings-dialog-grouped .settings-list {
   max-height: min(52vh, 420px);
 }
