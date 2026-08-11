@@ -1233,7 +1233,7 @@ function AppShell() {
 
         <section className="main">
           {!hasWorkspace ? (
-            <div className="empty">
+            <div className="empty" style={{ ['--wails-drop-target' as string]: 'drop' }}>
               <img src={logo} width={64} height={64} alt="" style={{ borderRadius: 14 }} />
               <h2>PinkHunkReader</h2>
               <div>Browse folders · Markdown live preview · PDF / images</div>
@@ -1243,6 +1243,7 @@ function AppShell() {
                 onOpenRecent={(p) => void openRecent(p)}
                 onNewFile={newFile}
               />
+              <div className="empty-drop-hint">Drop files or folders here to open</div>
             </div>
           ) : (
             <>
