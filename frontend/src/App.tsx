@@ -68,6 +68,30 @@ function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
 }
 
+/** Apply one close-save prompt choice over dirty tabs starting at `index`. */
+async function applyCloseSaveChoice(
+  choice: CloseSaveChoice,
+  dirty: OpenTab[],
+  index: number,
+  saveTab: (tab: OpenTab) => Promise<boolean>,
+): Promise<'next' | 'done' | 'abort'> {
+  if (choice === 'cancel') return 'abort'
+  if (choice === 'discard') return 'next'
+  if (choice === 'discard-all') return 'done'
+  if (choice === 'save') {
+    const ok = await saveTab(dirty[index])
+    return ok ? 'next' : 'abort'
+  }
+  if (choice === 'save-all') {
+    for (let j = index; j < dirty.length; j++) {
+      const ok = await saveTab(dirty[j])
+      if (!ok) return 'abort'
+    }
+    return 'done'
+  }
+  return 'next'
+}
+
 const EXPLORER_OPEN_KEY = 'pinkhunk-reader.explorer-open.v1'
 
 function loadExplorerOpen(): boolean {
@@ -109,7 +133,6 @@ function AppShell() {
     path: string
     name: string
     remaining: number
-    mode: 'tab' | 'quit'
   } | null>(null)
   const [placementPrompt, setPlacementPrompt] = useState<{
     pathLabel: string
@@ -218,10 +241,10 @@ function AppShell() {
     return () => window.clearTimeout(t)
   }, [tabs, activePath, roots, untitledSeq, sessionReady, persistSession])
 
-  const askCloseSave = useCallback((tab: OpenTab, remaining: number, mode: 'tab' | 'quit') => {
+  const askCloseSave = useCallback((tab: OpenTab, remaining: number) => {
     return new Promise<CloseSaveChoice>((resolve) => {
       closeResolverRef.current = resolve
-      setClosePrompt({ path: tab.path, name: tab.name, remaining, mode })
+      setClosePrompt({ path: tab.path, name: tab.name, remaining })
     })
   }, [])
 
@@ -595,6 +618,9 @@ function AppShell() {
       dirty: false,
       untitled: true,
     }
+    // Drop focus from File menu / toolbar so Monaco can take the caret.
+    const active = document.activeElement
+    if (active instanceof HTMLElement) active.blur()
     setTabs((prev) => [...prev, tab])
     setActivePath(path)
     setStatus(`New file · ${tab.name}`)
@@ -697,12 +723,9 @@ function AppShell() {
     const tab = tabsRef.current.find((t) => t.path === path)
     if (!tab) return
     if (tab.dirty) {
-      const choice = await askCloseSave(tab, 0, 'tab')
-      if (choice === 'cancel') return
-      if (choice === 'save') {
-        const ok = await saveTab(tab)
-        if (!ok) return
-      }
+      const choice = await askCloseSave(tab, 0)
+      const result = await applyCloseSaveChoice(choice, [tab], 0, saveTab)
+      if (result === 'abort') return
     }
     removeTab(path)
   }, [askCloseSave, removeTab, saveTab])
@@ -715,12 +738,10 @@ function AppShell() {
     const dirty = targets.filter((t) => t.dirty && t.editable)
     for (let i = 0; i < dirty.length; i++) {
       const tab = dirty[i]
-      const choice = await askCloseSave(tab, dirty.length - i - 1, 'tab')
-      if (choice === 'cancel') return
-      if (choice === 'save') {
-        const ok = await saveTab(tab)
-        if (!ok) return
-      }
+      const choice = await askCloseSave(tab, dirty.length - i - 1)
+      const result = await applyCloseSaveChoice(choice, dirty, i, saveTab)
+      if (result === 'abort') return
+      if (result === 'done') break
     }
     setTabs((prev) => {
       const next = prev.filter((t) => !drop.has(t.path))
@@ -760,12 +781,10 @@ function AppShell() {
     const dirty = affected.filter((t) => t.dirty && t.editable)
     for (let i = 0; i < dirty.length; i++) {
       const tab = dirty[i]
-      const choice = await askCloseSave(tab, dirty.length - i - 1, 'tab')
-      if (choice === 'cancel') return
-      if (choice === 'save') {
-        const ok = await saveTab(tab)
-        if (!ok) return
-      }
+      const choice = await askCloseSave(tab, dirty.length - i - 1)
+      const result = await applyCloseSaveChoice(choice, dirty, i, saveTab)
+      if (result === 'abort') return
+      if (result === 'done') break
     }
     try {
       await RemoveRoot(target)
@@ -799,12 +818,10 @@ function AppShell() {
     const dirty = affected.filter((t) => t.dirty && t.editable)
     for (let i = 0; i < dirty.length; i++) {
       const tab = dirty[i]
-      const choice = await askCloseSave(tab, dirty.length - i - 1, 'tab')
-      if (choice === 'cancel') return
-      if (choice === 'save') {
-        const ok = await saveTab(tab)
-        if (!ok) return
-      }
+      const choice = await askCloseSave(tab, dirty.length - i - 1)
+      const result = await applyCloseSaveChoice(choice, dirty, i, saveTab)
+      if (result === 'abort') return
+      if (result === 'done') break
     }
     try {
       await SetRoots([])
@@ -884,12 +901,9 @@ function AppShell() {
       return
     }
     if (tab.dirty) {
-      const choice = await askCloseSave(tab, 0, 'tab')
-      if (choice === 'cancel') return
-      if (choice === 'save') {
-        const ok = await saveTab(tab)
-        if (!ok) return
-      }
+      const choice = await askCloseSave(tab, 0)
+      const result = await applyCloseSaveChoice(choice, [tab], 0, saveTab)
+      if (result === 'abort') return
     }
     try {
       setTabs((prev) => prev.filter((t) => t.path !== activePath))
@@ -950,30 +964,14 @@ function AppShell() {
     if (quittingRef.current) return
     quittingRef.current = true
     try {
-      persistSession()
-      const dirty = tabsRef.current.filter((t) => t.dirty && t.editable)
-      for (let i = 0; i < dirty.length; i++) {
-        const tab = dirty[i]
-        const choice = await askCloseSave(tab, dirty.length - i - 1, 'quit')
-        if (choice === 'cancel') {
-          quittingRef.current = false
-          return
-        }
-        if (choice === 'save') {
-          const ok = await saveTab(tab)
-          if (!ok) {
-            quittingRef.current = false
-            return
-          }
-        }
-      }
+      // Window close: cache session (including unsaved) and quit without a save prompt.
       persistSession()
       await ConfirmQuit()
     } catch (e) {
       setError(String(e))
       quittingRef.current = false
     }
-  }, [askCloseSave, persistSession, saveTab])
+  }, [persistSession])
 
   useEffect(() => {
     const off = EventsOn('app:quit-requested', () => {

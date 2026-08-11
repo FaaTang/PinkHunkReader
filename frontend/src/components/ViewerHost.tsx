@@ -36,6 +36,7 @@ export function ViewerHost({ tab, onChange, onDirty, registerSave }: Props) {
               path={tab.path}
               name={tab.name}
               languageHint={tab.languageHint}
+              autoFocus={Boolean(tab.untitled)}
               onChange={onChange}
             />
           )
