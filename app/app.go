@@ -59,10 +59,9 @@ func (a *App) BeforeClose(ctx context.Context) (prevent bool) {
 }
 
 // ConfirmQuit allows the next close/quit to proceed.
+// Does not UnregisterWindow: session files stay so the next cold start can restore
+// tabs (including unsaved / untitled buffers), same idea as PinkHunkDB draft flush + Notepad++.
 func (a *App) ConfirmQuit() {
-	if a.windowID != "" {
-		_ = a.UnregisterWindow(a.windowID)
-	}
 	a.quitMu.Lock()
 	a.quitConfirmed = true
 	a.quitMu.Unlock()

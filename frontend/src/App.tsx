@@ -202,9 +202,9 @@ function AppShell() {
     setTreeRefresh((n) => n + 1)
   }, [])
 
-  const persistSession = useCallback(() => {
+  const persistSession = useCallback((): Promise<void> => {
     const id = windowIdRef.current
-    if (!id) return
+    if (!id) return Promise.resolve()
     const state = buildSession(
       id,
       rootsRef.current,
@@ -212,7 +212,7 @@ function AppShell() {
       tabsRef.current,
       untitledSeqRef.current,
     )
-    void SaveWindowSession(define.WindowSessionState.createFrom({
+    return SaveWindowSession(define.WindowSessionState.createFrom({
       version: state.version,
       windowId: state.windowId,
       roots: state.roots,
@@ -964,8 +964,9 @@ function AppShell() {
     if (quittingRef.current) return
     quittingRef.current = true
     try {
-      // Window close: cache session (including unsaved) and quit without a save prompt.
-      persistSession()
+      // Like PinkHunkDB: flush buffers into the session store, then quit — no save dialog.
+      // Session stays on disk (ConfirmQuit does not unregister) for next-launch restore.
+      await persistSession()
       await ConfirmQuit()
     } catch (e) {
       setError(String(e))

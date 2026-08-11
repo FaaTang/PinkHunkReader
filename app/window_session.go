@@ -157,7 +157,9 @@ func (a *App) RegisterWindow(windowID string) error {
 	})
 }
 
-// UnregisterWindow removes a window from the restore manifest (normal quit).
+// UnregisterWindow removes a window from the restore manifest and deletes its session file.
+// Used when abandoning a window (e.g. failed spawn), not on normal title-bar quit —
+// quit must keep the session so the next launch can restore open tabs.
 func (a *App) UnregisterWindow(windowID string) error {
 	windowID = strings.TrimSpace(windowID)
 	if windowID == "" {
