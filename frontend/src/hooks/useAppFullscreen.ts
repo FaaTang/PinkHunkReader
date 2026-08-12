@@ -25,6 +25,9 @@ export function useAppFullscreen() {
     try {
       WindowFullscreen()
       setFullscreen(true)
+      // Layout chrome hides asynchronously; nudge viewers to re-measure fit width.
+      window.setTimeout(() => window.dispatchEvent(new Event('resize')), 50)
+      window.setTimeout(() => window.dispatchEvent(new Event('resize')), 200)
     } catch {
       setFullscreen(false)
     }
@@ -34,6 +37,8 @@ export function useAppFullscreen() {
     try {
       WindowUnfullscreen()
       setFullscreen(false)
+      window.setTimeout(() => window.dispatchEvent(new Event('resize')), 50)
+      window.setTimeout(() => window.dispatchEvent(new Event('resize')), 200)
     } catch {
       setFullscreen(false)
     }

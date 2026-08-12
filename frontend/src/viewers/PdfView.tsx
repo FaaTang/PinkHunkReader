@@ -127,7 +127,7 @@ export function PdfView({ path }: Props) {
     }
   }, [path])
 
-  // Track scroll container width for fit-to-width zoom.
+  // Track scroll container width for fit-to-width zoom (incl. fullscreen / sidebar hide).
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -135,8 +135,20 @@ export function PdfView({ path }: Props) {
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
-    return () => ro.disconnect()
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
   }, [loading, outlineOpen])
+
+  // Fit-width / zoom changes must invalidate painted canvases; otherwise pages keep the old
+  // bitmap while the slot grows (fullscreen looks like content did not scale).
+  const layoutKey = `${fitWidth}:${zoomPct}:${pageCount}`
+  useEffect(() => {
+    if (loading || pageCount <= 0) return
+    paintedRef.current.clear()
+  }, [layoutKey, loading, pageCount])
 
   const layouts: PageLayout[] = useMemo(() => {
     const out: PageLayout[] = []

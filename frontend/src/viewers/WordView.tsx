@@ -17,6 +17,8 @@ interface PreparedDoc {
   headings: MdHeadingItem[]
 }
 
+const PAGE_WIDTH = 816
+
 /** Tag mammoth HTML headings with stable ids and collect outline entries. */
 export function prepareWordHtml(rawHtml: string): PreparedDoc {
   const source = (rawHtml || '').trim() || '<p>(empty document)</p>'
@@ -43,6 +45,7 @@ export function prepareWordHtml(rawHtml: string): PreparedDoc {
 
 export function WordView({ path, name }: Props) {
   const docRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
   const [headings, setHeadings] = useState<MdHeadingItem[]>([])
   const [messages, setMessages] = useState<string[]>([])
@@ -50,6 +53,25 @@ export function WordView({ path, name }: Props) {
   const [loading, setLoading] = useState(true)
   const [activeLine, setActiveLine] = useState(1)
   const [outlineOpen, setOutlineOpen] = usePersistedOutlineOpen(path, true)
+  /** 100% = fit page width to the viewer; scales up/down with fullscreen. */
+  const [zoomPct, setZoomPct] = useState(100)
+  const [fitWidth, setFitWidth] = useState(PAGE_WIDTH)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || loading) return
+    const measure = () => setFitWidth(Math.max(320, el.clientWidth - 48))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [loading, outlineOpen])
+
+  const fitScale = (fitWidth / PAGE_WIDTH) * (zoomPct / 100)
 
   useEffect(() => {
     let cancelled = false
@@ -109,8 +131,9 @@ export function WordView({ path, name }: Props) {
 
   useEffect(() => {
     if (loading || !html) return
+    const scroll = scrollRef.current
     const root = docRef.current
-    if (!root) return
+    if (!scroll || !root) return
 
     let timer = 0
     const syncActive = () => {
@@ -118,7 +141,7 @@ export function WordView({ path, name }: Props) {
       timer = window.setTimeout(() => {
         const heads = root.querySelectorAll('h1,h2,h3,h4,h5,h6')
         if (!heads.length) return
-        const top = root.getBoundingClientRect().top + 8
+        const top = scroll.getBoundingClientRect().top + 8
         let current = 1
         heads.forEach((node, index) => {
           if (node.getBoundingClientRect().top <= top) {
@@ -129,13 +152,13 @@ export function WordView({ path, name }: Props) {
       }, 120)
     }
 
-    root.addEventListener('scroll', syncActive, { passive: true })
+    scroll.addEventListener('scroll', syncActive, { passive: true })
     syncActive()
     return () => {
       window.clearTimeout(timer)
-      root.removeEventListener('scroll', syncActive)
+      scroll.removeEventListener('scroll', syncActive)
     }
-  }, [loading, html])
+  }, [loading, html, fitScale])
 
   const outlineEnabled = useMemo(() => headings.length > 0, [headings.length])
 
@@ -155,6 +178,20 @@ export function WordView({ path, name }: Props) {
         >
           {outlineOpen && outlineEnabled ? 'Hide outline' : 'Outline'}
         </button>
+        <button type="button" className="toolbar-btn" onClick={() => setZoomPct((z) => Math.max(50, z - 10))} title="Zoom out">
+          −
+        </button>
+        <button
+          type="button"
+          className="toolbar-btn pdf-zoom-label"
+          onClick={() => setZoomPct(100)}
+          title="Reset to fit width"
+        >
+          {zoomPct}%
+        </button>
+        <button type="button" className="toolbar-btn" onClick={() => setZoomPct((z) => Math.min(300, z + 10))} title="Zoom in">
+          +
+        </button>
         <span className="office-toolbar-label">Word · read-only</span>
         {messages.length > 0 ? (
           <span className="office-toolbar-hint" title={messages.join('\n')}>
@@ -172,11 +209,17 @@ export function WordView({ path, name }: Props) {
               open={outlineOpen}
               onSelect={(line) => jumpToHeading(line)}
             />
-            <div
-              className="office-doc preview-wrap"
-              ref={docRef}
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
+            <div className="office-doc-scroll" ref={scrollRef}>
+              <div
+                className="office-doc preview-wrap"
+                ref={docRef}
+                style={{
+                  width: PAGE_WIDTH,
+                  zoom: fitScale,
+                }}
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+            </div>
           </div>
         ) : null}
       </div>

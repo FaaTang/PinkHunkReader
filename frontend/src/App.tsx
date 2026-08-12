@@ -978,6 +978,14 @@ function AppShell() {
 
   const refreshWorkspace = useCallback(async () => {
     setError('')
+    let nextRoots = rootsRef.current
+    try {
+      const next = await GetRoots()
+      nextRoots = Array.isArray(next) ? next : []
+      setRoots(nextRoots)
+    } catch {
+      /* keep local roots */
+    }
     setTreeRefresh((n) => n + 1)
     if (!activePath) {
       setStatus('Explorer refreshed')
@@ -985,6 +993,11 @@ function AppShell() {
     }
     const tab = tabs.find((t) => t.path === activePath)
     if (!tab || tab.untitled) {
+      setStatus('Explorer refreshed')
+      return
+    }
+    // Active file no longer under any workspace root — tree refresh only.
+    if (!pathUnderAnyRoot(tab.path, nextRoots)) {
       setStatus('Explorer refreshed')
       return
     }
@@ -1000,6 +1013,7 @@ function AppShell() {
       setStatus(`Refreshed ${tab.name}`)
     } catch (e) {
       setError(String(e))
+      setStatus('Explorer refreshed')
     }
   }, [activePath, askCloseSave, openFile, saveTab, tabs])
 

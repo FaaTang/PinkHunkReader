@@ -654,6 +654,26 @@
   overflow: auto;
 }
 
+.office-doc-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  background: var(--ph-bg-panel-2);
+  padding: 16px;
+}
+
+.office-doc-scroll .office-doc {
+  flex: none;
+  overflow: visible;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  padding: 48px 56px;
+  box-sizing: border-box;
+}
+
 .office-doc table {
   border-collapse: collapse;
   margin: 0.8em 0;

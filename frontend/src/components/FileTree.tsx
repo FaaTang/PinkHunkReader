@@ -152,8 +152,9 @@ export function FileTree({
   }, [loadGroups])
 
   useEffect(() => {
+    // Always full reload from disk — never merge stale children after remove/refresh.
     if (refreshToken === 0) return
-    void loadGroups(groups)
+    void loadGroups(null)
     // intentionally only when refreshToken changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshToken])
@@ -341,19 +342,21 @@ export function FileTree({
           >
             {revealInOsLabel()}
           </button>
-          <button
-            type="button"
-            className="tree-context-item"
-            role="menuitem"
-            onClick={() => {
-              const rootPath = menu.rootPath
-              setMenu(null)
-              onRemoveFromWorkspace(rootPath)
-            }}
-          >
-            Remove from workspace
-            <span className="tree-context-sub">{menu.label}</span>
-          </button>
+          {pathsEqual(menu.clickedPath, menu.rootPath) ? (
+            <button
+              type="button"
+              className="tree-context-item"
+              role="menuitem"
+              onClick={() => {
+                const rootPath = menu.rootPath
+                setMenu(null)
+                onRemoveFromWorkspace(rootPath)
+              }}
+            >
+              Remove from workspace
+              <span className="tree-context-sub">{menu.label}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="tree-context-item"
@@ -408,7 +411,7 @@ async function ensureDirExpanded(list: TreeNode[], dirPath: string): Promise<Tre
 async function mergeExpanded(entries: DirEntry[], prev: TreeNode[]): Promise<TreeNode[]> {
   const out: TreeNode[] = []
   for (const e of entries) {
-    const old = prev.find((n) => n.entry.path === e.path)
+    const old = prev.find((n) => pathsEqual(n.entry.path, e.path))
     if (e.isDir && old?.expanded) {
       const children = await ListDir(e.path)
       out.push({
@@ -417,7 +420,7 @@ async function mergeExpanded(entries: DirEntry[], prev: TreeNode[]): Promise<Tre
         children: await mergeExpanded(children, old.children ?? []),
       })
     } else {
-      out.push({ entry: e, expanded: old?.expanded, children: old?.children })
+      out.push({ entry: e, expanded: old?.expanded })
     }
   }
   return out
@@ -426,11 +429,17 @@ async function mergeExpanded(entries: DirEntry[], prev: TreeNode[]): Promise<Tre
 async function togglePath(list: TreeNode[], path: string): Promise<TreeNode[]> {
   const out: TreeNode[] = []
   for (const n of list) {
-    if (n.entry.path === path) {
+    if (pathsEqual(n.entry.path, path)) {
       if (n.expanded) {
         out.push({ ...n, expanded: false })
       } else if (n.children) {
-        out.push({ ...n, expanded: true })
+        // Re-list on expand so Refresh / disk changes are not stuck behind a stale cache.
+        const entries = await ListDir(path)
+        out.push({
+          ...n,
+          expanded: true,
+          children: entries.map((e) => ({ entry: e })),
+        })
       } else {
         const entries = await ListDir(path)
         out.push({
