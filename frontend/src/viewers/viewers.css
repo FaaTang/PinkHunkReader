@@ -716,6 +716,42 @@
   vertical-align: top;
 }
 
+.office-col-letter {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ph-bg-chrome);
+  color: var(--ph-fg-4);
+  font-weight: 600;
+  text-align: center;
+  user-select: none;
+}
+
+.office-corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  background: var(--ph-bg-chrome);
+  min-width: 36px;
+}
+
+.office-col-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 4;
+  touch-action: none;
+}
+
+.office-col-resize:hover,
+.office-col-resize:active {
+  background: color-mix(in srgb, var(--ph-accent, #3b82f6) 35%, transparent);
+}
+
 .office-row-num {
   position: sticky;
   left: 0;
@@ -727,7 +763,7 @@
   z-index: 1;
 }
 
-.office-sheet tr:first-child td {
+.office-sheet tbody tr:first-child td {
   font-weight: 600;
   background: color-mix(in srgb, var(--ph-bg-chrome) 80%, transparent);
 }

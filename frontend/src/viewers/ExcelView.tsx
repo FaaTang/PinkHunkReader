@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { ReadBytes } from '../../wailsjs/go/app/App'
 import { ViewerLoading } from '../components/ViewerLoading'
@@ -22,6 +22,8 @@ const COL_CHAR_PX = 7.2
 const COL_PAD_PX = 16
 const COL_MIN_PX = 48
 const COL_MAX_PX = 480
+/** Double-click autofit may grow wider than the initial estimate clamp. */
+const COL_AUTOFIT_MAX_PX = 1200
 const ROW_NUM_COL_PX = 44
 
 export function ExcelView({ path, name }: Props) {
@@ -30,6 +32,18 @@ export function ExcelView({ path, name }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [truncated, setTruncated] = useState(false)
+  /** Per-sheet column widths; missing entry means use content estimate. */
+  const [widthBySheet, setWidthBySheet] = useState<Record<number, number[]>>({})
+
+  const tableRef = useRef<HTMLTableElement | null>(null)
+  const colElsRef = useRef<(HTMLTableColElement | null)[]>([])
+  const widthsLiveRef = useRef<number[]>([])
+  const dragRef = useRef<{
+    col: number
+    startX: number
+    startW: number
+    pointerId: number
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -38,6 +52,7 @@ export function ExcelView({ path, name }: Props) {
     setSheets([])
     setActive(0)
     setTruncated(false)
+    setWidthBySheet({})
 
     ;(async () => {
       try {
@@ -88,15 +103,81 @@ export function ExcelView({ path, name }: Props) {
     return max
   }, [current])
 
-  const colWidths = useMemo(() => {
+  const estimatedWidths = useMemo(() => {
     if (!current || colCount === 0) return [] as number[]
-    return estimateColWidths(current.rows, colCount)
+    return estimateColWidths(current.rows, colCount, COL_MAX_PX)
   }, [current, colCount])
+
+  const colWidths = widthBySheet[active] ?? estimatedWidths
+
+  useEffect(() => {
+    widthsLiveRef.current = colWidths.slice()
+  }, [colWidths])
 
   const tableWidth = useMemo(() => {
     if (colWidths.length === 0) return undefined
     return ROW_NUM_COL_PX + colWidths.reduce((sum, w) => sum + w, 0)
   }, [colWidths])
+
+  const applyLiveWidths = (next: number[]) => {
+    widthsLiveRef.current = next
+    const cols = colElsRef.current
+    for (let i = 0; i < next.length; i++) {
+      const el = cols[i]
+      if (el) el.style.width = `${next[i]}px`
+    }
+    const table = tableRef.current
+    if (table) {
+      table.style.width = `${ROW_NUM_COL_PX + next.reduce((sum, w) => sum + w, 0)}px`
+    }
+  }
+
+  const commitWidths = (next: number[]) => {
+    setWidthBySheet((prev) => ({ ...prev, [active]: next.slice() }))
+  }
+
+  const onResizePointerDown = (col: number, e: React.PointerEvent<HTMLSpanElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startW = widthsLiveRef.current[col] ?? COL_MIN_PX
+    dragRef.current = { col, startX: e.clientX, startW, pointerId: e.pointerId }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const onResizePointerMove = (e: React.PointerEvent<HTMLSpanElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    const delta = e.clientX - drag.startX
+    const nextW = clamp(drag.startW + delta, COL_MIN_PX, COL_AUTOFIT_MAX_PX)
+    const next = widthsLiveRef.current.slice()
+    if (next[drag.col] === nextW) return
+    next[drag.col] = nextW
+    applyLiveWidths(next)
+  }
+
+  const onResizePointerUp = (e: React.PointerEvent<HTMLSpanElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    dragRef.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* already released */
+    }
+    commitWidths(widthsLiveRef.current)
+  }
+
+  const onResizeDoubleClick = (col: number, e: React.MouseEvent<HTMLSpanElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragRef.current = null
+    if (!current) return
+    const fitted = estimateColWidth(current.rows, col, COL_AUTOFIT_MAX_PX)
+    const next = widthsLiveRef.current.slice()
+    next[col] = fitted
+    applyLiveWidths(next)
+    commitWidths(next)
+  }
 
   if (error) {
     return <div className="empty" style={{ color: 'var(--ph-danger)' }}>{error}</div>
@@ -130,13 +211,38 @@ export function ExcelView({ path, name }: Props) {
             {current.rows.length === 0 ? (
               <div className="empty">Empty sheet</div>
             ) : (
-              <table className="office-sheet" style={{ width: tableWidth }}>
+              <table ref={tableRef} className="office-sheet" style={{ width: tableWidth }}>
                 <colgroup>
                   <col style={{ width: ROW_NUM_COL_PX }} />
                   {colWidths.map((w, i) => (
-                    <col key={i} style={{ width: w }} />
+                    <col
+                      key={i}
+                      ref={(el) => {
+                        colElsRef.current[i] = el
+                      }}
+                      style={{ width: w }}
+                    />
                   ))}
                 </colgroup>
+                <thead>
+                  <tr>
+                    <th className="office-corner" aria-hidden="true" />
+                    {Array.from({ length: colCount }, (_, ci) => (
+                      <th key={ci} className="office-col-letter" scope="col">
+                        {colLetter(ci)}
+                        <span
+                          className="office-col-resize"
+                          title="Drag to resize · double-click to fit"
+                          onPointerDown={(e) => onResizePointerDown(ci, e)}
+                          onPointerMove={onResizePointerMove}
+                          onPointerUp={onResizePointerUp}
+                          onPointerCancel={onResizePointerUp}
+                          onDoubleClick={(e) => onResizeDoubleClick(ci, e)}
+                        />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
                 <tbody>
                   {current.rows.map((row, ri) => (
                     <tr key={ri}>
@@ -167,22 +273,43 @@ function cellToString(v: unknown): string {
   return String(v)
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n))
+}
+
+/** Excel-style column label: 0 → A, 25 → Z, 26 → AA. */
+function colLetter(index: number): string {
+  let n = index
+  let s = ''
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s
+    n = Math.floor(n / 26) - 1
+  } while (n >= 0)
+  return s
+}
+
 /** Fit each column to the longest display line, clamped so huge cells stay scrollable. */
-function estimateColWidths(rows: string[][], colCount: number): number[] {
+function estimateColWidths(rows: string[][], colCount: number, maxPx: number): number[] {
   const widths = Array.from({ length: colCount }, () => COL_MIN_PX)
-  for (const row of rows) {
-    for (let ci = 0; ci < colCount; ci++) {
-      const text = row[ci] ?? ''
-      if (!text) continue
-      let maxLineChars = 0
-      for (const line of text.split('\n')) {
-        maxLineChars = Math.max(maxLineChars, displayWidth(line))
-      }
-      const px = Math.ceil(maxLineChars * COL_CHAR_PX) + COL_PAD_PX
-      widths[ci] = Math.max(widths[ci], Math.min(COL_MAX_PX, px))
-    }
+  for (let ci = 0; ci < colCount; ci++) {
+    widths[ci] = estimateColWidth(rows, ci, maxPx)
   }
   return widths
+}
+
+function estimateColWidth(rows: string[][], col: number, maxPx: number): number {
+  let width = COL_MIN_PX
+  for (const row of rows) {
+    const text = row[col] ?? ''
+    if (!text) continue
+    let maxLineChars = 0
+    for (const line of text.split('\n')) {
+      maxLineChars = Math.max(maxLineChars, displayWidth(line))
+    }
+    const px = Math.ceil(maxLineChars * COL_CHAR_PX) + COL_PAD_PX
+    width = Math.max(width, Math.min(maxPx, px))
+  }
+  return width
 }
 
 /** Prefer wider slots for CJK / fullwidth glyphs vs ASCII. */
