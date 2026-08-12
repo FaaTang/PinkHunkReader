@@ -41,6 +41,8 @@ export function ListWindowsToRestore():Promise<Array<string>>;
 
 export function LoadWindowSession(arg1:string):Promise<define.WindowSessionState>;
 
+export function MarkWindowDead(arg1:string):Promise<void>;
+
 export function OpenDownloadedUpdateDirectory():Promise<define.QueryResult>;
 
 export function OpenDownloadedUpdatePackage():Promise<define.QueryResult>;

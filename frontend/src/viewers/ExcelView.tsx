@@ -215,28 +215,35 @@ export function ExcelView({ path, name }: Props) {
     }, 160)
   }
 
-  const placeCellTip = (clientX: number, clientY: number) => {
+  /** Place tip at a fixed anchor (cell edge), not under the cursor — so Copy stays clickable. */
+  const placeCellTip = (anchorX: number, anchorY: number) => {
     const el = cellTipRef.current
     if (!el) return
-    const pad = 12
     const tipW = el.offsetWidth || 280
     const tipH = el.offsetHeight || 80
     const maxX = window.innerWidth - tipW - 8
     const maxY = window.innerHeight - tipH - 8
-    const x = Math.max(8, Math.min(clientX + pad, maxX))
-    const y = Math.max(8, Math.min(clientY + pad, maxY))
+    let x = anchorX
+    let y = anchorY + 4
+    if (y + tipH > window.innerHeight - 8) {
+      y = anchorY - tipH - 4
+    }
+    if (x + tipW > window.innerWidth - 8) {
+      x = maxX
+    }
+    x = Math.max(8, Math.min(x, maxX))
+    y = Math.max(8, Math.min(y, maxY))
     el.style.left = `${x}px`
     el.style.top = `${y}px`
   }
 
-  const showCellTip = (row: number, col: number, text: string, clientX: number, clientY: number) => {
+  const showCellTip = (row: number, col: number, text: string, td: HTMLElement) => {
     clearCellTipHideTimer()
-    cellTipPosRef.current = { x: clientX, y: clientY }
     const key = `${row}:${col}`
-    if (cellTipKeyRef.current === key) {
-      placeCellTip(clientX, clientY)
-      return
-    }
+    // Same cell: keep tip still so the pointer can reach Copy without the panel fleeing.
+    if (cellTipKeyRef.current === key) return
+    const rect = td.getBoundingClientRect()
+    cellTipPosRef.current = { x: rect.left, y: rect.bottom }
     cellTipKeyRef.current = key
     setCellTipCopied(false)
     setCellTip({ text, row, col })
@@ -265,7 +272,7 @@ export function ExcelView({ path, name }: Props) {
       scheduleHideCellTip()
       return
     }
-    showCellTip(row, col, text, e.clientX, e.clientY)
+    showCellTip(row, col, text, td)
   }
 
   const onSheetPointerLeave = () => {

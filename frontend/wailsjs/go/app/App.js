@@ -78,6 +78,10 @@ export function LoadWindowSession(arg1) {
   return window['go']['app']['App']['LoadWindowSession'](arg1);
 }
 
+export function MarkWindowDead(arg1) {
+  return window['go']['app']['App']['MarkWindowDead'](arg1);
+}
+
 export function OpenDownloadedUpdateDirectory() {
   return window['go']['app']['App']['OpenDownloadedUpdateDirectory']();
 }
