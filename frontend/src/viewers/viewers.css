@@ -716,6 +716,12 @@
   vertical-align: top;
 }
 
+/* Header / row-gutter grid lines: pink so sticky chrome stays readable */
+.office-sheet thead th,
+.office-sheet th.office-row-num {
+  border-color: color-mix(in srgb, var(--ph-accent) 58%, #c8c8c8);
+}
+
 .office-col-letter {
   position: sticky;
   top: 0;

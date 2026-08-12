@@ -10,6 +10,8 @@ import './viewers.css'
 interface Props {
   path: string
   name: string
+  /** False while the tab is kept mounted but hidden. */
+  active?: boolean
 }
 
 interface PreparedDoc {
@@ -43,7 +45,7 @@ export function prepareWordHtml(rawHtml: string): PreparedDoc {
   return { html: root.innerHTML, headings }
 }
 
-export function WordView({ path, name }: Props) {
+export function WordView({ path, name, active = true }: Props) {
   const docRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
@@ -59,8 +61,12 @@ export function WordView({ path, name }: Props) {
 
   useEffect(() => {
     const el = scrollRef.current
-    if (!el || loading) return
-    const measure = () => setFitWidth(Math.max(320, el.clientWidth - 48))
+    if (!el || loading || !active) return
+    const measure = () => {
+      const w = el.clientWidth
+      if (w <= 0) return
+      setFitWidth(Math.max(320, w - 48))
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -69,7 +75,7 @@ export function WordView({ path, name }: Props) {
       ro.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [loading, outlineOpen])
+  }, [loading, outlineOpen, active])
 
   const fitScale = (fitWidth / PAGE_WIDTH) * (zoomPct / 100)
 
@@ -130,7 +136,7 @@ export function WordView({ path, name }: Props) {
   }, [])
 
   useEffect(() => {
-    if (loading || !html) return
+    if (!active || loading || !html) return
     const scroll = scrollRef.current
     const root = docRef.current
     if (!scroll || !root) return
@@ -158,7 +164,7 @@ export function WordView({ path, name }: Props) {
       window.clearTimeout(timer)
       scroll.removeEventListener('scroll', syncActive)
     }
-  }, [loading, html, fitScale])
+  }, [active, loading, html, fitScale])
 
   const outlineEnabled = useMemo(() => headings.length > 0, [headings.length])
 

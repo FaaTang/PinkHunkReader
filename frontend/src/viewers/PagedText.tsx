@@ -16,11 +16,13 @@ import './viewers.css'
 
 interface Props {
   path: string
+  /** False while the tab is kept mounted but hidden. */
+  active?: boolean
   onDirty: (dirty: boolean) => void
   registerSave: (fn: (() => Promise<void>) | null) => void
 }
 
-export function PagedText({ path, onDirty, registerSave }: Props) {
+export function PagedText({ path, active = true, onDirty, registerSave }: Props) {
   const {
     startLine, endLine, totalLines, windowLines,
     hasNext, loading, error, pageNext, ensureAhead, ensureThrough, ensureAll,
@@ -118,18 +120,28 @@ export function PagedText({ path, onDirty, registerSave }: Props) {
   const bottomLoading = loading && endLine > 0 && nearBottom
   const bootLoading = !error && (endLine === 0 || !editorReady)
 
-  useRegisterGoTo({
-    kind: 'line',
-    current: Math.max(1, endLine || 1),
-    max: Math.max(totalLines || endLine || 1, 1),
-    go: async (n) => {
-      const line = Math.max(1, n)
-      await ensureThrough(line)
-      const ed = paging.editorRef.current
-      ed?.revealLineNearTop?.(line)
-      ed?.setPosition?.({ lineNumber: line, column: 1 })
-    },
-  })
+  useEffect(() => {
+    if (!active) return
+    const t = window.setTimeout(() => paging.editorRef.current?.layout?.(), 0)
+    return () => window.clearTimeout(t)
+  }, [active, paging.editorRef])
+
+  useRegisterGoTo(
+    active
+      ? {
+          kind: 'line',
+          current: Math.max(1, endLine || 1),
+          max: Math.max(totalLines || endLine || 1, 1),
+          go: async (n) => {
+            const line = Math.max(1, n)
+            await ensureThrough(line)
+            const ed = paging.editorRef.current
+            ed?.revealLineNearTop?.(line)
+            ed?.setPosition?.({ lineNumber: line, column: 1 })
+          },
+        }
+      : null,
+  )
 
   return (
     <div className="viewer-single">

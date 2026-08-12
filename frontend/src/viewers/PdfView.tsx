@@ -12,6 +12,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker
 
 interface Props {
   path: string
+  /** False while the tab is kept mounted but hidden. */
+  active?: boolean
 }
 
 interface OutlineNode {
@@ -29,7 +31,7 @@ interface PageLayout {
 
 const RENDER_PAD = 1 // pages above/below viewport to keep painted
 
-export function PdfView({ path }: Props) {
+export function PdfView({ path, active = true }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const pageElsRef = useRef<Map<number, HTMLDivElement>>(new Map())
   const canvasElsRef = useRef<Map<number, HTMLCanvasElement>>(new Map())
@@ -130,8 +132,12 @@ export function PdfView({ path }: Props) {
   // Track scroll container width for fit-to-width zoom (incl. fullscreen / sidebar hide).
   useEffect(() => {
     const el = scrollRef.current
-    if (!el) return
-    const measure = () => setFitWidth(Math.max(320, el.clientWidth - 40))
+    if (!el || !active) return
+    const measure = () => {
+      const w = el.clientWidth
+      if (w <= 0) return
+      setFitWidth(Math.max(320, w - 40))
+    }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -140,7 +146,7 @@ export function PdfView({ path }: Props) {
       ro.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [loading, outlineOpen])
+  }, [loading, outlineOpen, active])
 
   // Fit-width / zoom changes must invalidate painted canvases; otherwise pages keep the old
   // bitmap while the slot grows (fullscreen looks like content did not scale).
@@ -200,7 +206,7 @@ export function PdfView({ path }: Props) {
   }, [jumpDraft, pageCount, scrollToPage])
 
   useRegisterGoTo(
-    pageCount > 0
+    active && pageCount > 0
       ? {
           kind: 'page',
           current: page,
@@ -215,7 +221,7 @@ export function PdfView({ path }: Props) {
   const syncVisible = useCallback(async () => {
     const doc = docRef.current
     const scroll = scrollRef.current
-    if (!doc || !scroll || loading) return
+    if (!doc || !scroll || loading || !active) return
     const gen = ++syncGenRef.current
 
     const scrollRect = scroll.getBoundingClientRect()
@@ -315,11 +321,11 @@ export function PdfView({ path }: Props) {
         if (e?.name === 'RenderingCancelledException') continue
       }
     }
-  }, [layouts, loading, pageCount])
+  }, [layouts, loading, pageCount, active])
 
   useEffect(() => {
     const el = scrollRef.current
-    if (!el || loading) return
+    if (!el || loading || !active) return
     let raf = 0
     const onScroll = () => {
       cancelAnimationFrame(raf)
@@ -329,12 +335,13 @@ export function PdfView({ path }: Props) {
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     // Native wheel = smooth continuous scroll (no page-flip hijack).
+    // Re-paint when tab becomes visible again (hidden tabs skip sync to keep scroll).
     void syncVisible()
     return () => {
       cancelAnimationFrame(raf)
       el.removeEventListener('scroll', onScroll)
     }
-  }, [loading, syncVisible, zoomPct, layouts])
+  }, [loading, syncVisible, zoomPct, layouts, active])
 
   const zoomBy = (delta: number) => {
     setZoomPct((z) => Math.min(300, Math.max(50, z + delta)))
@@ -347,7 +354,7 @@ export function PdfView({ path }: Props) {
 
   // Keep ancestors expanded and scroll the active outline row into view.
   useEffect(() => {
-    if (!activeOutline) return
+    if (!active || !activeOutline) return
     setExpandedIds((prev) => {
       let changed = false
       const next = new Set(prev)
@@ -366,7 +373,7 @@ export function PdfView({ path }: Props) {
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }, 50)
     return () => window.clearTimeout(t)
-  }, [activeOutline])
+  }, [active, activeOutline])
 
   const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {

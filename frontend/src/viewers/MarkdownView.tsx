@@ -12,10 +12,12 @@ interface Props {
   path: string
   content: string
   editable: boolean
+  /** False while the tab is kept mounted but hidden. */
+  active?: boolean
   onChange: (v: string) => void
 }
 
-export function MarkdownView({ path, content, editable, onChange }: Props) {
+export function MarkdownView({ path, content, editable, active = true, onChange }: Props) {
   const editorRef = useRef<any>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const [activeLine, setActiveLine] = useState(1)
@@ -57,25 +59,29 @@ export function MarkdownView({ path, content, editable, onChange }: Props) {
   }, [])
 
   const lineCount = useMemo(() => Math.max(1, content.split(/\r?\n/).length), [content])
-  useRegisterGoTo({
-    kind: 'line',
-    current: activeLine,
-    max: lineCount,
-    go: (n) => {
-      const ed = editorRef.current
-      const line = Math.min(lineCount, Math.max(1, n))
-      ed?.revealLineNearTop?.(line)
-      ed?.setPosition?.({ lineNumber: line, column: 1 })
-      setActiveLine(line)
-    },
-  })
-
-  // Relayout Monaco after showing the edit pane again.
+  // Relayout Monaco after showing the edit pane again (or revealing a hidden tab).
   useEffect(() => {
-    if (mode === 'preview') return
+    if (!active || mode === 'preview') return
     const t = window.setTimeout(() => editorRef.current?.layout?.(), 0)
     return () => window.clearTimeout(t)
-  }, [mode])
+  }, [mode, active])
+
+  useRegisterGoTo(
+    active
+      ? {
+          kind: 'line',
+          current: activeLine,
+          max: lineCount,
+          go: (n) => {
+            const ed = editorRef.current
+            const line = Math.min(lineCount, Math.max(1, n))
+            ed?.revealLineNearTop?.(line)
+            ed?.setPosition?.({ lineNumber: line, column: 1 })
+            setActiveLine(line)
+          },
+        }
+      : null,
+  )
 
   return (
     <div className="viewer-single">

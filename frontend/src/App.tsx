@@ -145,7 +145,8 @@ function AppShell() {
     defaultTarget: OpenParentFolderChoice
   } | null>(null)
 
-  const pagedSaveRef = useRef<(() => Promise<void>) | null>(null)
+  /** Per-tab paged save hooks (tabs stay mounted while hidden). */
+  const pagedSaveByPathRef = useRef(new Map<string, () => Promise<void>>())
   const tabsRef = useRef(tabs)
   const activePathRef = useRef(activePath)
   const rootsRef = useRef(roots)
@@ -720,24 +721,23 @@ function AppShell() {
     setStatus(`New file · ${tab.name}`)
   }, [])
 
-  const updateActiveContent = useCallback((content: string) => {
-    if (!activePath) return
+  const updateTabContent = useCallback((path: string, content: string) => {
     setTabs((prev) =>
       prev.map((t) =>
-        t.path === activePath ? { ...t, content, dirty: true } : t,
+        t.path === path ? { ...t, content, dirty: true } : t,
       ),
     )
-  }, [activePath])
+  }, [])
 
-  const markDirty = useCallback((dirty: boolean) => {
-    if (!activePath) return
+  const markTabDirty = useCallback((path: string, dirty: boolean) => {
     setTabs((prev) =>
-      prev.map((t) => (t.path === activePath ? { ...t, dirty } : t)),
+      prev.map((t) => (t.path === path ? { ...t, dirty } : t)),
     )
-  }, [activePath])
+  }, [])
 
-  const registerPagedSave = useCallback((fn: (() => Promise<void>) | null) => {
-    pagedSaveRef.current = fn
+  const registerPagedSave = useCallback((path: string, fn: (() => Promise<void>) | null) => {
+    if (fn) pagedSaveByPathRef.current.set(path, fn)
+    else pagedSaveByPathRef.current.delete(path)
   }, [])
 
   const saveTab = useCallback(async (
@@ -781,13 +781,9 @@ function AppShell() {
         return true
       }
       if (tab.largeMode) {
-        if (activePathRef.current === tab.path) {
-          const savePaged = pagedSaveRef.current
-          if (!savePaged) throw new Error('Paged editor is not ready')
-          await savePaged()
-        } else {
-          throw new Error('Switch to the paged tab to save it')
-        }
+        const savePaged = pagedSaveByPathRef.current.get(tab.path)
+        if (!savePaged) throw new Error('Paged editor is not ready')
+        await savePaged()
       } else {
         await WriteText(tab.path, tab.content)
       }
@@ -818,7 +814,6 @@ function AppShell() {
     }
     const candidates = tabsRef.current.filter((t) => {
       if (!t.editable || !t.dirty || t.untitled) return false
-      if (t.largeMode && activePathRef.current !== t.path) return false
       return true
     })
     if (!candidates.length) return
@@ -830,7 +825,6 @@ function AppShell() {
       for (const candidate of candidates) {
         const latest = tabsRef.current.find((t) => t.path === candidate.path)
         if (!latest?.dirty || latest.untitled || !latest.editable) continue
-        if (latest.largeMode && activePathRef.current !== latest.path) continue
         const ok = await saveTab(latest, { reason: 'auto', managePhase: false })
         if (!ok) break
         saved += 1
@@ -1447,13 +1441,28 @@ function AppShell() {
                 onLocate={locateInExplorer}
                 onRevealInOs={(p) => void revealInOs(p)}
               />
-              {activeTab ? (
-                <ViewerHost
-                  tab={activeTab}
-                  onChange={updateActiveContent}
-                  onDirty={markDirty}
-                  registerSave={registerPagedSave}
-                />
+              {tabs.length > 0 ? (
+                <div className="viewer-stack">
+                  {tabs.map((tab) => {
+                    const isActive = tab.path === activePath
+                    return (
+                      <div
+                        key={tab.path}
+                        className="viewer-stack-item"
+                        hidden={!isActive}
+                        aria-hidden={!isActive}
+                      >
+                        <ViewerHost
+                          tab={tab}
+                          active={isActive}
+                          onChange={(content) => updateTabContent(tab.path, content)}
+                          onDirty={(dirty) => markTabDirty(tab.path, dirty)}
+                          registerSave={(fn) => registerPagedSave(tab.path, fn)}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
               ) : (
                 <div className="empty">
                   <div>Select a file from the explorer or create a new file</div>

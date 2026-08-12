@@ -13,6 +13,8 @@ interface Props {
   languageHint?: string
   /** Focus the editor once it mounts (e.g. new untitled file). */
   autoFocus?: boolean
+  /** False while the tab is kept mounted but hidden. */
+  active?: boolean
   onChange: (v: string) => void
 }
 
@@ -31,6 +33,7 @@ export function TextView({
   name,
   languageHint,
   autoFocus = false,
+  active = true,
   onChange,
 }: Props) {
   const editorRef = useRef<any>(null)
@@ -46,15 +49,25 @@ export function TextView({
     focusEditor(ed)
   }, [lineCount])
 
-  useRegisterGoTo({
-    kind: 'line',
-    current: 1,
-    max: lineCount,
-    go: goLine,
-  })
+  useRegisterGoTo(
+    active
+      ? {
+          kind: 'line',
+          current: 1,
+          max: lineCount,
+          go: goLine,
+        }
+      : null,
+  )
 
   useEffect(() => {
-    if (!autoFocus || !editable) return
+    if (!active) return
+    const t = window.setTimeout(() => editorRef.current?.layout?.(), 0)
+    return () => window.clearTimeout(t)
+  }, [active])
+
+  useEffect(() => {
+    if (!autoFocus || !editable || !active) return
     let cancelled = false
     let attempts = 0
     const tick = () => {
@@ -74,7 +87,7 @@ export function TextView({
     return () => {
       cancelled = true
     }
-  }, [autoFocus, editable, path])
+  }, [autoFocus, editable, active, path])
 
   return (
     <div className="viewer-single">
