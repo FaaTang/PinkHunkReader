@@ -16,13 +16,20 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 
 ## Features
 
-- **Folder workspace**: open a directory, tree navigation, multi-tabs
+- **Folder workspace**: open a directory, tree navigation, multi-tabs; show/hide explorer (`Ctrl+,` / `Cmd+,` by default)
+- **New file**: `Ctrl+N` / `Cmd+N`; prompt to save when closing dirty tabs
+- **Drag & drop / shell open**: drop files or folders onto the window; OS “Open with PinkHunkReader” handoff supported
+- **Session restore**: reopen unsaved/open tabs after quit or window close; window size and position are remembered
+- **Auto-save**: optional interval auto-save for editable tabs (Settings → General)
 - **Markdown**: side-by-side edit + live preview (GFM)
-- **Text / code**: Monaco editor with basic language highlighting
+- **Text / code**: Monaco editor with basic language highlighting; JSON format/minify via `Ctrl+Shift+M` / `Cmd+Shift+M`
 - **PDF**: page-by-page preview (PDF.js)
+- **Excel**: read-only `.xlsx` / `.xls` grid preview (column resize, cell tooltips)
 - **Images**: PNG / JPG / GIF / WebP / SVG and more
 - **Large files**: text / Markdown above 2MB stream into the Monaco model chunk by chunk (Monaco's own virtualized rendering keeps it smooth), prefetching the next window near the bottom edge. Paging only affects loading — files stay **editable and saveable**; saving auto-drains any not-yet-loaded tail before write.
 - **Path sandbox**: all IO stays under the opened root
+- **Recent files**: listed under Open; count configurable in Settings → General (default 10)
+- **Proxy & updates**: global proxy in Settings → Proxy; update check from About / preferences
 
 ## CI / Releases
 
@@ -74,13 +81,16 @@ fsx/        Path guard, tree, IO, line-window reads
 frontend/   React UI: FileTree + Tabs + ViewerHost
 ```
 
-Viewer routing is driven by `kind` (`markdown` / `text` / `pdf` / `image` / `unknown`).
+Viewer routing is driven by `kind` (`markdown` / `text` / `pdf` / `image` / `excel` / `unknown`).
 
 ## Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl+N` / macOS `Cmd+N` | New file |
 | `Ctrl+S` / macOS `Cmd+S` | Save current editable tab |
+| `Ctrl+,` / macOS `Cmd+,` | Show / hide explorer |
+| `Ctrl+Shift+M` / macOS `Cmd+Shift+M` | JSON format / minify toggle |
 | `Ctrl+G` / macOS `Cmd+G` | Go to page (PDF) or line (text / Markdown) |
 | `F11` | Toggle full screen |
 
