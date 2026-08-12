@@ -29,6 +29,8 @@ export function GetRoot():Promise<string>;
 
 export function GetRoots():Promise<Array<string>>;
 
+export function GetShellIntegrationPrefs():Promise<define.ShellIntegrationPrefs>;
+
 export function InspectPath(arg1:string):Promise<define.PickOpenResult>;
 
 export function InstallUpdateAndRestart():Promise<define.QueryResult>;
@@ -70,6 +72,8 @@ export function RevealInFileManager(arg1:string):Promise<void>;
 export function SaveGlobalProxy(arg1:app.GlobalProxyView):Promise<define.QueryResult>;
 
 export function SaveOpenPlacementPrefs(arg1:define.OpenPlacementPrefs):Promise<define.OpenPlacementPrefs>;
+
+export function SaveShellIntegrationPrefs(arg1:define.ShellIntegrationPrefs):Promise<define.ShellIntegrationPrefs>;
 
 export function SaveWindowSession(arg1:define.WindowSessionState):Promise<void>;
 

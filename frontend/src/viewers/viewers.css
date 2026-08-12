@@ -679,6 +679,7 @@
 
 .office-sheet {
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 12px;
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   min-width: 100%;
@@ -689,7 +690,6 @@
   border: 1px solid var(--ph-br-1);
   padding: 3px 8px;
   white-space: pre;
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--ph-fg-2);

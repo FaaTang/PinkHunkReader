@@ -74,6 +74,7 @@ export namespace define {
 	export class LaunchInfo {
 	    windowId: string;
 	    openPath: string;
+	    openPaths: string[];
 	    openIsDir: boolean;
 	    shouldRestore: boolean;
 	
@@ -85,6 +86,7 @@ export namespace define {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.windowId = source["windowId"];
 	        this.openPath = source["openPath"];
+	        this.openPaths = source["openPaths"];
 	        this.openIsDir = source["openIsDir"];
 	        this.shouldRestore = source["shouldRestore"];
 	    }
@@ -151,6 +153,18 @@ export namespace define {
 	        this.success = source["success"];
 	        this.message = source["message"];
 	        this.data = source["data"];
+	    }
+	}
+	export class ShellIntegrationPrefs {
+	    contextMenu: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShellIntegrationPrefs(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.contextMenu = source["contextMenu"];
 	    }
 	}
 	export class TextSlice {

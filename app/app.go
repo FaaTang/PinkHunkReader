@@ -40,6 +40,9 @@ func (a *App) Startup(ctx context.Context) {
 	if a.launch.WindowID != "" {
 		_ = a.RegisterWindow(a.launch.WindowID)
 	}
+	clearBootClaim()
+	a.syncShellIntegrationOnStartup()
+	a.startShellPendingWatcher()
 	// Restore user geometry when present; otherwise first-open dynamic size + center.
 	a.applyStartupWindowGeometry(ctx)
 }

@@ -62,7 +62,7 @@ import {
   WriteText,
 } from '../wailsjs/go/app/App'
 import { define } from '../wailsjs/go/models'
-import { EventsOn, OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime'
+import { EventsOn, OnFileDrop, OnFileDropOff, WindowShow, WindowUnminimise } from '../wailsjs/runtime/runtime'
 
 function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
@@ -443,27 +443,42 @@ function AppShell() {
           if (session.roots.length || session.tabs.length) {
             await applySessionState(session, isCancelled)
           }
-        } else if (launch?.openPath) {
-          if (launch.openIsDir) {
-            await ensureRoot(launch.openPath)
-          } else {
-            const label = launch.openPath.split(/[/\\]/).pop() || launch.openPath
-            let prefs = normalizeOpenPlacement(DEFAULT_OPEN_PLACEMENT)
+        } else if (launch?.openPath || (Array.isArray(launch?.openPaths) && launch.openPaths.length)) {
+          const launchPaths = [
+            ...((launch?.openPaths as string[] | undefined) ?? []),
+            ...(launch?.openPath ? [String(launch.openPath)] : []),
+          ]
+          const uniqueLaunch = [...new Set(launchPaths.map((p) => normalizePath(p)).filter(Boolean))]
+          let prefs = normalizeOpenPlacement(DEFAULT_OPEN_PLACEMENT)
+          try {
+            prefs = normalizeOpenPlacement(await GetOpenPlacementPrefs())
+          } catch {
+            /* defaults */
+          }
+          for (const path of uniqueLaunch) {
+            if (cancelled) break
+            let isDir = uniqueLaunch.length === 1 ? Boolean(launch.openIsDir) : false
             try {
-              prefs = normalizeOpenPlacement(await GetOpenPlacementPrefs())
+              const probed = await InspectPath(path)
+              if (probed?.path) {
+                isDir = Boolean(probed.isDir)
+              }
             } catch {
-              /* defaults */
+              /* keep guess */
             }
+            if (isDir) {
+              await ensureRoot(path)
+              continue
+            }
+            const label = path.split(/[/\\]/).pop() || path
             let parentChoice: OpenParentFolderChoice | 'cancel' = prefs.parentFolderTarget
             if (prefs.parentFolderMode !== 'always') {
               parentChoice = await askOpenParentFolder(label, prefs.parentFolderTarget)
             }
-            if (!cancelled && parentChoice !== 'cancel') {
-              const rootPath =
-                parentChoice === 'file' ? launch.openPath : parentDir(launch.openPath)
-              await ensureRoot(rootPath)
-              await openFile(launch.openPath)
-            }
+            if (parentChoice === 'cancel') continue
+            const rootPath = parentChoice === 'file' ? path : parentDir(path)
+            await ensureRoot(rootPath)
+            await openFile(path)
           }
         } else {
           const legacy = loadLegacyLocalSession()
@@ -578,6 +593,54 @@ function AppShell() {
       setError(String(e))
     }
   }, [openPathWithChoice, resolveOpenParentFolder, resolveOpenPlacement])
+
+  /** OS shell / second-instance handoff: always open in this window (Notepad++-style). */
+  const openShellPaths = useCallback(async (paths: string[]) => {
+    const unique = [...new Set(paths.map((p) => normalizePath(p)).filter(Boolean))]
+    WindowShow()
+    WindowUnminimise()
+    if (!unique.length) return
+    setError('')
+    try {
+      const items: { path: string; isDir: boolean }[] = []
+      for (const path of unique) {
+        try {
+          const probed = await InspectPath(path)
+          if (!probed?.path) continue
+          items.push({ path: probed.path, isDir: Boolean(probed.isDir) })
+        } catch {
+          /* skip invalid */
+        }
+      }
+      if (!items.length) {
+        setError('No valid files or folders to open')
+        return
+      }
+      const summary =
+        items.length === 1
+          ? items[0].isDir
+            ? folderLabel(items[0].path)
+            : items[0].path.split(/[/\\]/).pop() || items[0].path
+          : `${items.length} items`
+      const needsParentAsk = items.some(
+        (item) => !item.isDir && !pathUnderAnyRoot(item.path, rootsRef.current),
+      )
+      let parentFolderChoice: OpenParentFolderChoice | undefined
+      if (needsParentAsk) {
+        const resolved = await resolveOpenParentFolder(summary)
+        if (resolved === 'cancel') return
+        parentFolderChoice = resolved
+      }
+      for (const item of items) {
+        await openPathWithChoice(item.path, item.isDir, 'current', parentFolderChoice)
+      }
+      if (items.length > 1) {
+        setStatus(`Opened ${items.length} items`)
+      }
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [openPathWithChoice, resolveOpenParentFolder])
 
   const openPicked = useCallback(async (mode: 'file' | 'folder') => {
     setError('')
@@ -966,11 +1029,19 @@ function AppShell() {
     try {
       // Like PinkHunkDB: flush buffers into the session store, then quit — no save dialog.
       // Session stays on disk (ConfirmQuit does not unregister) for next-launch restore.
-      await persistSession()
+      await Promise.race([
+        persistSession(),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+      ])
       await ConfirmQuit()
     } catch (e) {
       setError(String(e))
       quittingRef.current = false
+      try {
+        await ConfirmQuit()
+      } catch {
+        /* last resort */
+      }
     }
   }, [persistSession])
 
@@ -982,6 +1053,20 @@ function AppShell() {
       off()
     }
   }, [handleQuitRequested])
+
+  useEffect(() => {
+    const off = EventsOn('app:shell-open', (payload: { paths?: string[]; focus?: boolean } | string[]) => {
+      const paths = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.paths)
+          ? payload.paths
+          : []
+      void openShellPaths(paths)
+    })
+    return () => {
+      off()
+    }
+  }, [openShellPaths])
 
   useEffect(() => {
     OnFileDrop((_x, _y, paths) => {

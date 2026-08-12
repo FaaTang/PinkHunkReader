@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/FaaTang/PinkHunkReader/define"
@@ -12,6 +13,7 @@ import (
 type launchOptions struct {
 	WindowID      string
 	OpenPath      string
+	OpenPaths     []string
 	OpenIsDir     bool
 	ShouldRestore bool
 	SpawnRestores []string
@@ -21,21 +23,44 @@ func parseLaunchArgs(args []string) launchOptions {
 	opts := launchOptions{}
 	for _, raw := range args {
 		arg := strings.TrimSpace(raw)
+		if arg == "" {
+			continue
+		}
 		switch {
 		case strings.HasPrefix(arg, "--window-id="):
 			opts.WindowID = strings.TrimSpace(strings.TrimPrefix(arg, "--window-id="))
 		case strings.HasPrefix(arg, "--open-folder="):
-			opts.OpenPath = strings.TrimSpace(strings.TrimPrefix(arg, "--open-folder="))
+			p := strings.TrimSpace(strings.TrimPrefix(arg, "--open-folder="))
+			opts.OpenPaths = append(opts.OpenPaths, p)
+			opts.OpenPath = p
 			opts.OpenIsDir = true
 		case strings.HasPrefix(arg, "--open-file="):
-			opts.OpenPath = strings.TrimSpace(strings.TrimPrefix(arg, "--open-file="))
+			p := strings.TrimSpace(strings.TrimPrefix(arg, "--open-file="))
+			opts.OpenPaths = append(opts.OpenPaths, p)
+			opts.OpenPath = p
 			opts.OpenIsDir = false
 		case strings.HasPrefix(arg, "--open="):
-			opts.OpenPath = strings.TrimSpace(strings.TrimPrefix(arg, "--open="))
+			p := strings.TrimSpace(strings.TrimPrefix(arg, "--open="))
+			opts.OpenPaths = append(opts.OpenPaths, p)
+			opts.OpenPath = p
 		case arg == "--open-dir":
 			opts.OpenIsDir = true
 		case arg == "--restore":
 			opts.ShouldRestore = true
+		case strings.HasPrefix(arg, "--"):
+			// ignore unknown flags
+		default:
+			// Positional path from shell / Open With.
+			opts.OpenPaths = append(opts.OpenPaths, arg)
+			opts.OpenPath = arg
+		}
+	}
+	if opts.OpenPath == "" && len(opts.OpenPaths) > 0 {
+		opts.OpenPath = opts.OpenPaths[0]
+	}
+	if !opts.OpenIsDir && opts.OpenPath != "" {
+		if st, err := os.Stat(opts.OpenPath); err == nil && st.IsDir() {
+			opts.OpenIsDir = true
 		}
 	}
 	return opts
@@ -50,7 +75,7 @@ func (a *App) resolveLaunch(opts launchOptions) launchOptions {
 		if opts.WindowID != "" {
 			// Child / restored window: adopt id and mark restore unless opening a fresh path only.
 			a.windowID = opts.WindowID
-			if opts.OpenPath == "" {
+			if opts.OpenPath == "" && len(opts.OpenPaths) == 0 {
 				opts.ShouldRestore = true
 			}
 			return nil
@@ -83,9 +108,14 @@ func (a *App) resolveLaunch(opts launchOptions) launchOptions {
 
 // GetLaunchInfo returns CLI / restore instructions for the frontend.
 func (a *App) GetLaunchInfo() define.LaunchInfo {
+	paths := append([]string{}, a.launch.OpenPaths...)
+	if len(paths) == 0 && a.launch.OpenPath != "" {
+		paths = []string{a.launch.OpenPath}
+	}
 	return define.LaunchInfo{
 		WindowID:      a.launch.WindowID,
 		OpenPath:      a.launch.OpenPath,
+		OpenPaths:     paths,
 		OpenIsDir:     a.launch.OpenIsDir,
 		ShouldRestore: a.launch.ShouldRestore,
 	}
@@ -144,5 +174,8 @@ func (a *App) spawnWindowProcess(windowID, openPath string, isDir, restore bool)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Stdin = nil
+	if dir := filepath.Dir(exe); dir != "" {
+		cmd.Dir = dir
+	}
 	return cmd.Start()
 }

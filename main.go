@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"github.com/FaaTang/PinkHunkReader/app"
 	"github.com/wailsapp/wails/v2"
@@ -15,6 +16,10 @@ import (
 var assets embed.FS
 
 func main() {
+	if app.TryHandoffExternalLaunch(os.Args[1:]) {
+		return
+	}
+
 	application := app.NewApp()
 
 	err := wails.Run(&options.App{

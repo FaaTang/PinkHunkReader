@@ -2,10 +2,11 @@ package define
 
 // LaunchInfo describes how this process was started (CLI / restore).
 type LaunchInfo struct {
-	WindowID   string `json:"windowId"`
-	OpenPath   string `json:"openPath"`
-	OpenIsDir  bool   `json:"openIsDir"`
-	ShouldRestore bool `json:"shouldRestore"`
+	WindowID      string   `json:"windowId"`
+	OpenPath      string   `json:"openPath"`
+	OpenPaths     []string `json:"openPaths"`
+	OpenIsDir     bool     `json:"openIsDir"`
+	ShouldRestore bool     `json:"shouldRestore"`
 }
 
 // WindowSessionState is persisted per window on disk.

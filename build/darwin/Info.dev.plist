@@ -23,9 +23,35 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
-        {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>
+          <dict>
+            <key>CFBundleTypeName</key>
+            <string>All Files</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+              <string>public.item</string>
+              <string>public.data</string>
+              <string>public.content</string>
+            </array>
+          </dict>
+          <dict>
+            <key>CFBundleTypeName</key>
+            <string>Folders</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+              <string>public.folder</string>
+              <string>public.directory</string>
+            </array>
+          </dict>
           {{range .Info.FileAssociations}}
           <dict>
             <key>CFBundleTypeExtensions</key>
@@ -36,12 +62,13 @@
             <string>{{.Name}}</string>
             <key>CFBundleTypeRole</key>
             <string>{{.Role}}</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
             <key>CFBundleTypeIconFile</key>
             <string>{{.IconName}}</string>
           </dict>
           {{end}}
         </array>
-        {{end}}
         {{if .Info.Protocols}}
         <key>CFBundleURLTypes</key>
         <array>

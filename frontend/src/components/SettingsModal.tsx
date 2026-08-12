@@ -8,7 +8,7 @@ import {
 } from '../settings/shortcuts'
 import { MAX_RECENT_MAX, MIN_RECENT_MAX } from '../settings/recentFiles'
 import type { useAppUpdateManager } from '../hooks/useAppUpdateManager'
-import { GetGlobalProxyConfig, GetOpenPlacementPrefs, SaveGlobalProxy, SaveOpenPlacementPrefs } from '../../wailsjs/go/app/App'
+import { GetGlobalProxyConfig, GetOpenPlacementPrefs, GetShellIntegrationPrefs, SaveGlobalProxy, SaveOpenPlacementPrefs, SaveShellIntegrationPrefs } from '../../wailsjs/go/app/App'
 import {
   DEFAULT_OPEN_PLACEMENT,
   normalizeOpenPlacement,
@@ -103,6 +103,9 @@ export function SettingsModal({ update }: Props) {
   const [proxyStatus, setProxyStatus] = useState('')
   const [openPlacement, setOpenPlacement] = useState<OpenPlacementPrefs>(DEFAULT_OPEN_PLACEMENT)
   const [openPlacementStatus, setOpenPlacementStatus] = useState('')
+  const [shellContextMenu, setShellContextMenu] = useState(true)
+  const [shellStatus, setShellStatus] = useState('')
+  const [shellBusy, setShellBusy] = useState(false)
 
   useEffect(() => {
     if (!settingsOpen) setCapturing(null)
@@ -131,6 +134,15 @@ export function SettingsModal({ update }: Props) {
       } catch (e) {
         if (!cancelled) setOpenPlacementStatus(String(e))
       }
+      try {
+        const shell = await GetShellIntegrationPrefs()
+        if (!cancelled) {
+          setShellContextMenu(shell?.contextMenu !== false)
+          setShellStatus('')
+        }
+      } catch (e) {
+        if (!cancelled) setShellStatus(String(e))
+      }
     })()
     return () => {
       cancelled = true
@@ -145,6 +157,21 @@ export function SettingsModal({ update }: Props) {
       setOpenPlacement(saved)
     } catch (e) {
       setOpenPlacementStatus(String(e))
+    }
+  }
+
+  const applyShellContextMenu = async (enabled: boolean) => {
+    setShellContextMenu(enabled)
+    setShellStatus('')
+    setShellBusy(true)
+    try {
+      const saved = await SaveShellIntegrationPrefs({ contextMenu: enabled })
+      setShellContextMenu(saved?.contextMenu !== false)
+    } catch (e) {
+      setShellStatus(String(e))
+      setShellContextMenu(!enabled)
+    } finally {
+      setShellBusy(false)
     }
   }
 
@@ -362,6 +389,28 @@ export function SettingsModal({ update }: Props) {
                       Clear list
                     </button>
                   </div>
+                  <div className="settings-row settings-row-stack">
+                    <label className="settings-check">
+                      <input
+                        type="checkbox"
+                        checked={shellContextMenu}
+                        disabled={shellBusy}
+                        onChange={(e) => void applyShellContextMenu(e.target.checked)}
+                      />
+                      <span>
+                        OS context menu
+                        <span className="settings-row-sub">
+                          Add &quot;Open with PinkHunkReader&quot; for files and folders (portable). Default on;
+                          rewrites the current exe path on each launch when enabled.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                  {shellStatus ? (
+                    <div className="settings-hint" style={{ color: 'var(--ph-danger)' }}>
+                      {shellStatus}
+                    </div>
+                  ) : null}
                   <div className="settings-row">
                     <span className="settings-row-label">
                       Open in

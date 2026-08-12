@@ -54,6 +54,10 @@ export function GetRoots() {
   return window['go']['app']['App']['GetRoots']();
 }
 
+export function GetShellIntegrationPrefs() {
+  return window['go']['app']['App']['GetShellIntegrationPrefs']();
+}
+
 export function InspectPath(arg1) {
   return window['go']['app']['App']['InspectPath'](arg1);
 }
@@ -136,6 +140,10 @@ export function SaveGlobalProxy(arg1) {
 
 export function SaveOpenPlacementPrefs(arg1) {
   return window['go']['app']['App']['SaveOpenPlacementPrefs'](arg1);
+}
+
+export function SaveShellIntegrationPrefs(arg1) {
+  return window['go']['app']['App']['SaveShellIntegrationPrefs'](arg1);
 }
 
 export function SaveWindowSession(arg1) {
