@@ -18,8 +18,8 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 
 - **Folder workspace**: open a directory, tree navigation, multi-tabs; show/hide explorer (`Ctrl+,` / `Cmd+,` by default)
 - **New file**: `Ctrl+N` / `Cmd+N`; prompt to save when closing dirty tabs
-- **Drag & drop / shell open**: drop files or folders onto the window; OS “Open with PinkHunkReader” handoff supported
-- **Session restore**: reopen unsaved/open tabs after quit or window close; window size and position are remembered
+- **Drag & drop / shell open**: drop files or folders onto the window; OS “Open with PinkHunkReader” uses the same open placement and parent-folder settings as in-app Open
+- **Session restore**: after quitting the last window, reopen its tabs/roots on next launch (not every window you closed earlier); window size and position are remembered
 - **Auto-save**: optional interval auto-save for editable tabs (Settings → General)
 - **Markdown**: side-by-side edit + live preview (GFM)
 - **Text / code**: Monaco editor with basic language highlighting; JSON format/minify via `Ctrl+Shift+M` / `Cmd+Shift+M`

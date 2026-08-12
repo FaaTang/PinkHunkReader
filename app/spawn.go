@@ -95,7 +95,17 @@ func (a *App) resolveLaunch(opts launchOptions) launchOptions {
 
 		stale := staleWindowIDsLocked(m)
 		live := hasLiveWindowLocked(m)
+		launchPaths := collectLaunchPaths(opts)
 		if len(stale) > 0 && !live {
+			// Explicit shell/CLI open paths: start a fresh window and leave the last
+			// quit session on disk for a later plain launch (so file-only / placement prefs apply).
+			if len(launchPaths) > 0 {
+				opts.WindowID = newWindowID()
+				opts.ShouldRestore = false
+				opts.SpawnRestores = nil
+				a.windowID = opts.WindowID
+				return nil
+			}
 			primary, spawn := prioritizeRestorableWindowIDs(configDir, stale)
 			opts.WindowID = primary
 			opts.ShouldRestore = true
@@ -132,6 +142,7 @@ func (a *App) GetLaunchInfo() define.LaunchInfo {
 }
 
 // SpawnRestoredWindows starts sibling processes for remaining crash-recovery windows.
+// Normally empty: cold start only restores the newest restorable session.
 func (a *App) SpawnRestoredWindows() error {
 	for _, id := range a.launch.SpawnRestores {
 		if err := a.spawnWindowProcess(id, "", false, true); err != nil {

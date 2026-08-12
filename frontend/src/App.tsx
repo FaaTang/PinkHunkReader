@@ -155,6 +155,7 @@ function AppShell() {
   const closeResolverRef = useRef<((c: CloseSaveChoice) => void) | null>(null)
   const placementResolverRef = useRef<((c: OpenPlacementChoice | 'cancel') => void) | null>(null)
   const parentFolderResolverRef = useRef<((c: OpenParentFolderChoice | 'cancel') => void) | null>(null)
+  const openKnownPathsRef = useRef<(paths: string[]) => Promise<void>>(async () => {})
   const quittingRef = useRef(false)
   const savePhaseRef = useRef<'idle' | 'manual' | 'auto'>('idle')
   const autoSaveBusyRef = useRef(false)
@@ -471,50 +472,23 @@ function AppShell() {
           }
           // Restore path finished (possibly empty session on disk) — empty writes are intentional.
           allowEmptyPersist = true
-        } else if (launch?.openPath || (Array.isArray(launch?.openPaths) && launch.openPaths.length)) {
-          const launchPaths = [
-            ...((launch?.openPaths as string[] | undefined) ?? []),
-            ...(launch?.openPath ? [String(launch.openPath)] : []),
-          ]
-          const uniqueLaunch = [...new Set(launchPaths.map((p) => normalizePath(p)).filter(Boolean))]
-          let prefs = normalizeOpenPlacement(DEFAULT_OPEN_PLACEMENT)
-          try {
-            prefs = normalizeOpenPlacement(await GetOpenPlacementPrefs())
-          } catch {
-            /* defaults */
-          }
-          for (const path of uniqueLaunch) {
-            if (cancelled) break
-            let isDir = uniqueLaunch.length === 1 ? Boolean(launch.openIsDir) : false
-            try {
-              const probed = await InspectPath(path)
-              if (probed?.path) {
-                isDir = Boolean(probed.isDir)
-              }
-            } catch {
-              /* keep guess */
-            }
-            if (isDir) {
-              await ensureRoot(path)
-              continue
-            }
-            const label = path.split(/[/\\]/).pop() || path
-            let parentChoice: OpenParentFolderChoice | 'cancel' = prefs.parentFolderTarget
-            if (prefs.parentFolderMode !== 'always') {
-              parentChoice = await askOpenParentFolder(label, prefs.parentFolderTarget)
-            }
-            if (parentChoice === 'cancel') continue
-            const rootPath = parentChoice === 'file' ? path : parentDir(path)
-            await ensureRoot(rootPath)
-            await openFile(path)
-          }
-        } else {
+        } else if (!launch?.openPath && !(Array.isArray(launch?.openPaths) && launch.openPaths.length)) {
           const legacy = loadLegacyLocalSession()
           if (legacy && (legacy.roots.length || legacy.tabs.length)) {
             const migrated = { ...legacy, windowId: id || legacy.windowId }
             await applySessionState(migrated, isCancelled)
             clearLegacyLocalSession()
           }
+        }
+
+        // Shell / CLI paths: skip native picker only; same open file/folder path as Open menu.
+        const launchPaths = [
+          ...((launch?.openPaths as string[] | undefined) ?? []),
+          ...(launch?.openPath ? [String(launch.openPath)] : []),
+        ]
+        const uniqueLaunch = [...new Set(launchPaths.map((p) => normalizePath(p)).filter(Boolean))]
+        if (!cancelled && uniqueLaunch.length) {
+          await openKnownPathsRef.current(uniqueLaunch)
         }
       } catch (e) {
         if (!cancelled) setError(String(e))
@@ -529,7 +503,7 @@ function AppShell() {
     return () => {
       cancelled = true
     }
-  }, [applySessionState, askOpenParentFolder, ensureRoot, openFile])
+  }, [applySessionState])
 
   const resolveOpenPlacement = useCallback(async (pathLabel: string): Promise<OpenPlacementChoice | 'cancel'> => {
     if (rootsRef.current.length === 0) return 'current'
@@ -583,54 +557,12 @@ function AppShell() {
     await openPathWithChoice(path, isDir, choice)
   }, [openPathWithChoice, resolveOpenPlacement])
 
-  const openDroppedPaths = useCallback(async (paths: string[]) => {
+  /**
+   * Open already-known paths (shell / drop / CLI).
+   * Same as Open → File/Folder after the native picker returns — picker step only is skipped.
+   */
+  const openKnownPaths = useCallback(async (paths: string[]) => {
     const unique = [...new Set(paths.map((p) => normalizePath(p)).filter(Boolean))]
-    if (!unique.length) return
-    setError('')
-    try {
-      const items: { path: string; isDir: boolean }[] = []
-      for (const path of unique) {
-        const probed = await InspectPath(path)
-        if (!probed?.path) continue
-        items.push({ path: probed.path, isDir: Boolean(probed.isDir) })
-      }
-      if (!items.length) {
-        setError('No valid files or folders to open')
-        return
-      }
-      const summary =
-        items.length === 1
-          ? items[0].isDir
-            ? folderLabel(items[0].path)
-            : items[0].path.split(/[/\\]/).pop() || items[0].path
-          : `${items.length} items`
-      const choice = await resolveOpenPlacement(summary)
-      if (choice === 'cancel') return
-      const needsParentAsk =
-        choice === 'current' &&
-        items.some((item) => !item.isDir && !pathUnderAnyRoot(item.path, rootsRef.current))
-      let parentFolderChoice: OpenParentFolderChoice | undefined
-      if (needsParentAsk) {
-        const resolved = await resolveOpenParentFolder(summary)
-        if (resolved === 'cancel') return
-        parentFolderChoice = resolved
-      }
-      for (const item of items) {
-        await openPathWithChoice(item.path, item.isDir, choice, parentFolderChoice)
-      }
-      if (items.length > 1 && choice === 'current') {
-        setStatus(`Opened ${items.length} items`)
-      }
-    } catch (e) {
-      setError(String(e))
-    }
-  }, [openPathWithChoice, resolveOpenParentFolder, resolveOpenPlacement])
-
-  /** OS shell / second-instance handoff: always open in this window (Notepad++-style). */
-  const openShellPaths = useCallback(async (paths: string[]) => {
-    const unique = [...new Set(paths.map((p) => normalizePath(p)).filter(Boolean))]
-    WindowShow()
-    WindowUnminimise()
     if (!unique.length) return
     setError('')
     try {
@@ -648,15 +580,18 @@ function AppShell() {
         setError('No valid files or folders to open')
         return
       }
-      const summary =
-        items.length === 1
-          ? items[0].isDir
-            ? folderLabel(items[0].path)
-            : items[0].path.split(/[/\\]/).pop() || items[0].path
-          : `${items.length} items`
-      const needsParentAsk = items.some(
-        (item) => !item.isDir && !pathUnderAnyRoot(item.path, rootsRef.current),
-      )
+      // One path: identical to openPicked after PickAndOpen.
+      if (items.length === 1) {
+        await openPathInPlacement(items[0].path, items[0].isDir)
+        return
+      }
+      // Several paths (multi-drop): ask placement once, then reuse openPathWithChoice.
+      const summary = `${items.length} items`
+      const choice = await resolveOpenPlacement(summary)
+      if (choice === 'cancel') return
+      const needsParentAsk =
+        choice === 'current' &&
+        items.some((item) => !item.isDir && !pathUnderAnyRoot(item.path, rootsRef.current))
       let parentFolderChoice: OpenParentFolderChoice | undefined
       if (needsParentAsk) {
         const resolved = await resolveOpenParentFolder(summary)
@@ -664,16 +599,26 @@ function AppShell() {
         parentFolderChoice = resolved
       }
       for (const item of items) {
-        await openPathWithChoice(item.path, item.isDir, 'current', parentFolderChoice)
+        await openPathWithChoice(item.path, item.isDir, choice, parentFolderChoice)
       }
-      if (items.length > 1) {
+      if (choice === 'current') {
         setStatus(`Opened ${items.length} items`)
       }
     } catch (e) {
       setError(String(e))
     }
-  }, [openPathWithChoice, resolveOpenParentFolder])
+  }, [openPathInPlacement, openPathWithChoice, resolveOpenParentFolder, resolveOpenPlacement])
 
+  openKnownPathsRef.current = openKnownPaths
+
+  /** Shell context menu / second-instance handoff: entry only — then openKnownPaths. */
+  const openShellPaths = useCallback(async (paths: string[]) => {
+    WindowShow()
+    WindowUnminimise()
+    await openKnownPaths(paths)
+  }, [openKnownPaths])
+
+  /** Open menu: native picker, then the same openPathInPlacement as shell. */
   const openPicked = useCallback(async (mode: 'file' | 'folder') => {
     setError('')
     try {
@@ -1119,8 +1064,8 @@ function AppShell() {
     if (quittingRef.current) return
     quittingRef.current = true
     try {
-      // Like PinkHunkDB: flush buffers into the session store, then quit — no save dialog.
-      // Session stays on disk (ConfirmQuit does not unregister) for next-launch restore.
+      // Flush buffers into the session store, then quit — no save dialog.
+      // Last window keeps session for restore; sibling windows unregister on close.
       await Promise.race([
         persistSession(),
         new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
@@ -1163,12 +1108,12 @@ function AppShell() {
   useEffect(() => {
     OnFileDrop((_x, _y, paths) => {
       if (!paths?.length) return
-      void openDroppedPaths(paths)
+      void openKnownPaths(paths)
     }, true)
     return () => {
       OnFileDropOff()
     }
-  }, [openDroppedPaths])
+  }, [openKnownPaths])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

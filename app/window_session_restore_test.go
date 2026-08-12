@@ -108,6 +108,77 @@ func TestPrioritizeRestorableWindowIDsPrefersRichAndDropsEmpty(t *testing.T) {
 	}
 }
 
+func TestPrioritizeRestorableWindowIDsKeepsOnlyNewestRich(t *testing.T) {
+	dir := t.TempDir()
+	sessions := filepath.Join(dir, sessionsDirName)
+	if err := os.MkdirAll(sessions, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	older := define.WindowSessionState{
+		Version:  2,
+		WindowID: "win-old",
+		Roots:    []string{`D:\old`},
+		Tabs:     []define.WindowSessionTab{{Path: `D:\old\a.md`, Name: "a.md"}},
+	}
+	newer := define.WindowSessionState{
+		Version:  2,
+		WindowID: "win-new",
+		Roots:    []string{`D:\new`},
+		Tabs:     []define.WindowSessionTab{{Path: `D:\new\b.md`, Name: "b.md"}},
+	}
+	if err := writeJSONAtomic(filepath.Join(sessions, "win-old.json"), older); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONAtomic(filepath.Join(sessions, "win-new.json"), newer); err != nil {
+		t.Fatal(err)
+	}
+	m := windowManifest{
+		Version: 1,
+		Windows: []windowManifestEntry{
+			{ID: "win-old", PID: 0, UpdatedAt: 10},
+			{ID: "win-new", PID: 0, UpdatedAt: 99},
+		},
+	}
+	if err := saveWindowManifestLocked(dir, m); err != nil {
+		t.Fatal(err)
+	}
+	primary, spawn := prioritizeRestorableWindowIDs(dir, []string{"win-old", "win-new"})
+	if primary != "win-new" {
+		t.Fatalf("primary=%q want win-new (newest UpdatedAt)", primary)
+	}
+	if len(spawn) != 0 {
+		t.Fatalf("spawn=%v want empty (only last window)", spawn)
+	}
+	loaded, err := loadWindowManifestLocked(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Windows) != 1 || loaded.Windows[0].ID != "win-new" {
+		t.Fatalf("expected older sibling pruned, got %#v", loaded.Windows)
+	}
+	if _, err := os.Stat(filepath.Join(sessions, "win-old.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected win-old session removed, err=%v", err)
+	}
+}
+
+func TestHasOtherLiveWindowLocked(t *testing.T) {
+	pid := os.Getpid()
+	m := windowManifest{
+		Version: 1,
+		Windows: []windowManifestEntry{
+			{ID: "self", PID: pid, UpdatedAt: 1},
+			{ID: "other-dead", PID: 0, UpdatedAt: 2},
+		},
+	}
+	if hasOtherLiveWindowLocked(m, "self") {
+		t.Fatalf("dead sibling should not count as live")
+	}
+	m.Windows = append(m.Windows, windowManifestEntry{ID: "other-live", PID: pid, UpdatedAt: 3})
+	if !hasOtherLiveWindowLocked(m, "self") {
+		t.Fatalf("expected sibling with live pid to count")
+	}
+}
+
 func TestConsumeUpdateRestoreHint(t *testing.T) {
 	dir := t.TempDir()
 	if err := writeUpdateRestoreHint(dir, "win-update"); err != nil {

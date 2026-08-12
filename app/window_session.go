@@ -159,7 +159,7 @@ func (a *App) RegisterWindow(windowID string) error {
 }
 
 // MarkWindowDead clears the live PID for a window while keeping the session file.
-// Call on intentional quit / update restart so the next cold start (or relaunch with
+// Call on last-window quit / update restart so the next cold start (or relaunch with
 // --window-id) can restore even if Windows reuses the old PID for another process.
 func (a *App) MarkWindowDead(windowID string) error {
 	windowID = strings.TrimSpace(windowID)
@@ -170,31 +170,65 @@ func (a *App) MarkWindowDead(windowID string) error {
 		return nil
 	}
 	return withWindowStore(func(configDir string) error {
-		m, err := loadWindowManifestLocked(configDir)
-		if err != nil {
-			return err
-		}
-		now := time.Now().UnixMilli()
-		changed := false
-		for i := range m.Windows {
-			if m.Windows[i].ID == windowID {
-				m.Windows[i].PID = 0
-				m.Windows[i].UpdatedAt = now
-				changed = true
-				break
-			}
-		}
-		if !changed {
-			return nil
-		}
-		return saveWindowManifestLocked(configDir, m)
+		return markWindowDeadLocked(configDir, windowID)
 	})
 }
 
+func markWindowDeadLocked(configDir, windowID string) error {
+	m, err := loadWindowManifestLocked(configDir)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UnixMilli()
+	changed := false
+	for i := range m.Windows {
+		if m.Windows[i].ID == windowID {
+			m.Windows[i].PID = 0
+			m.Windows[i].UpdatedAt = now
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return saveWindowManifestLocked(configDir, m)
+}
+
 // UnregisterWindow removes a window from the restore manifest and deletes its session file.
-// Used when abandoning a window (e.g. failed spawn), not on normal title-bar quit —
-// quit must keep the session so the next launch can restore open tabs.
+// Used when abandoning a window (failed spawn, or title-bar close while other windows live).
 func (a *App) UnregisterWindow(windowID string) error {
+	windowID = strings.TrimSpace(windowID)
+	if windowID == "" {
+		windowID = a.windowID
+	}
+	if windowID == "" {
+		return nil
+	}
+	return withWindowStore(func(configDir string) error {
+		return unregisterWindowLocked(configDir, windowID)
+	})
+}
+
+func unregisterWindowLocked(configDir, windowID string) error {
+	m, err := loadWindowManifestLocked(configDir)
+	if err != nil {
+		return err
+	}
+	next := make([]windowManifestEntry, 0, len(m.Windows))
+	for _, w := range m.Windows {
+		if w.ID != windowID {
+			next = append(next, w)
+		}
+	}
+	m.Windows = next
+	_ = os.Remove(sessionFilePath(configDir, windowID))
+	return saveWindowManifestLocked(configDir, m)
+}
+
+// finalizeWindowOnQuit discards this window when siblings are still live; otherwise
+// keeps the session for next-launch restore of the last closed window only.
+func (a *App) finalizeWindowOnQuit(windowID string) error {
 	windowID = strings.TrimSpace(windowID)
 	if windowID == "" {
 		windowID = a.windowID
@@ -207,15 +241,10 @@ func (a *App) UnregisterWindow(windowID string) error {
 		if err != nil {
 			return err
 		}
-		next := make([]windowManifestEntry, 0, len(m.Windows))
-		for _, w := range m.Windows {
-			if w.ID != windowID {
-				next = append(next, w)
-			}
+		if hasOtherLiveWindowLocked(m, windowID) {
+			return unregisterWindowLocked(configDir, windowID)
 		}
-		m.Windows = next
-		_ = os.Remove(sessionFilePath(configDir, windowID))
-		return saveWindowManifestLocked(configDir, m)
+		return markWindowDeadLocked(configDir, windowID)
 	})
 }
 
@@ -361,6 +390,20 @@ func hasLiveWindowLocked(m windowManifest) bool {
 	return false
 }
 
+// hasOtherLiveWindowLocked reports whether any window other than selfID is still running.
+func hasOtherLiveWindowLocked(m windowManifest, selfID string) bool {
+	selfID = strings.TrimSpace(selfID)
+	for _, w := range m.Windows {
+		if selfID != "" && w.ID == selfID {
+			continue
+		}
+		if w.PID > 0 && processAlive(w.PID) {
+			return true
+		}
+	}
+	return false
+}
+
 func staleWindowIDsLocked(m windowManifest) []string {
 	out := make([]string, 0, len(m.Windows))
 	for _, w := range m.Windows {
@@ -422,11 +465,19 @@ func sessionHasRestorableContentLocked(configDir, windowID string) bool {
 	return len(state.Tabs) > 0
 }
 
-// prioritizeRestorableWindowIDs puts sessions with roots/tabs first and drops empty orphans
-// from the spawn list so an update/crash recovery does not open a blank second window.
+// prioritizeRestorableWindowIDs picks a single window to restore: the restorable
+// session with the latest manifest UpdatedAt (last closed / last saved). Older
+// siblings and empty orphans are pruned — cold start never reopens every past window.
 func prioritizeRestorableWindowIDs(configDir string, ids []string) (primary string, spawn []string) {
 	if len(ids) == 0 {
 		return "", nil
+	}
+	m, err := loadWindowManifestLocked(configDir)
+	updated := map[string]int64{}
+	if err == nil {
+		for _, w := range m.Windows {
+			updated[w.ID] = w.UpdatedAt
+		}
 	}
 	rich := make([]string, 0, len(ids))
 	empty := make([]string, 0, len(ids))
@@ -439,32 +490,48 @@ func prioritizeRestorableWindowIDs(configDir string, ids []string) (primary stri
 	}
 	if len(rich) == 0 {
 		// All empty: keep a single blank window id (first), do not spawn more blanks.
-		return ids[0], nil
+		primary = ids[0]
+		pruneWindowIDsLocked(configDir, ids[1:])
+		return primary, nil
 	}
 	primary = rich[0]
-	if len(rich) > 1 {
-		spawn = append(spawn, rich[1:]...)
-	}
-	// Drop empty orphans from the manifest so they cannot become a later "new instance".
-	for _, id := range empty {
-		_ = os.Remove(sessionFilePath(configDir, id))
-	}
-	if len(empty) > 0 {
-		m, err := loadWindowManifestLocked(configDir)
-		if err == nil {
-			next := make([]windowManifestEntry, 0, len(m.Windows))
-			drop := map[string]struct{}{}
-			for _, id := range empty {
-				drop[id] = struct{}{}
-			}
-			for _, w := range m.Windows {
-				if _, ok := drop[w.ID]; !ok {
-					next = append(next, w)
-				}
-			}
-			m.Windows = next
-			_ = saveWindowManifestLocked(configDir, m)
+	bestAt := updated[primary]
+	for _, id := range rich[1:] {
+		at := updated[id]
+		if at >= bestAt {
+			primary = id
+			bestAt = at
 		}
 	}
-	return primary, spawn
+	drop := make([]string, 0, len(ids)-1)
+	for _, id := range ids {
+		if id != primary {
+			drop = append(drop, id)
+		}
+	}
+	pruneWindowIDsLocked(configDir, drop)
+	return primary, nil
+}
+
+func pruneWindowIDsLocked(configDir string, ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	drop := map[string]struct{}{}
+	for _, id := range ids {
+		drop[id] = struct{}{}
+		_ = os.Remove(sessionFilePath(configDir, id))
+	}
+	m, err := loadWindowManifestLocked(configDir)
+	if err != nil {
+		return
+	}
+	next := make([]windowManifestEntry, 0, len(m.Windows))
+	for _, w := range m.Windows {
+		if _, ok := drop[w.ID]; !ok {
+			next = append(next, w)
+		}
+	}
+	m.Windows = next
+	_ = saveWindowManifestLocked(configDir, m)
 }

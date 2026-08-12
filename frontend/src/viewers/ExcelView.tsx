@@ -1,9 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import { ReadBytes } from '../../wailsjs/go/app/App'
+import { ClipboardSetText } from '../../wailsjs/runtime/runtime'
 import { ViewerLoading } from '../components/ViewerLoading'
 import { toUint8Array } from '../util/bytes'
 import './viewers.css'
+
+/** Overlap tip into the cell so the pointer can reach Copy without crossing a gap / next row. */
+const CELL_TIP_OVERLAP_PX = 10
 
 interface Props {
   path: string
@@ -53,7 +58,7 @@ export function ExcelView({ path, name }: Props) {
   const cellTipRef = useRef<HTMLDivElement | null>(null)
   const cellTipPinnedRef = useRef(false)
   const cellTipHideTimerRef = useRef<number | null>(null)
-  const cellTipPosRef = useRef({ x: 0, y: 0 })
+  const cellTipPosRef = useRef({ x: 0, y: 0, top: 0 })
   const cellTipKeyRef = useRef('')
   const [cellTip, setCellTip] = useState<CellHoverTip | null>(null)
   const [cellTipCopied, setCellTipCopied] = useState(false)
@@ -212,21 +217,22 @@ export function ExcelView({ path, name }: Props) {
     cellTipHideTimerRef.current = window.setTimeout(() => {
       if (cellTipPinnedRef.current) return
       hideCellTip()
-    }, 160)
+    }, 280)
   }
 
-  /** Place tip at a fixed anchor (cell edge), not under the cursor — so Copy stays clickable. */
-  const placeCellTip = (anchorX: number, anchorY: number) => {
+  /** Place tip overlapping the cell edge — no gap — so Copy stays reachable. */
+  const placeCellTip = (anchorLeft: number, cellTop: number, cellBottom: number) => {
     const el = cellTipRef.current
     if (!el) return
     const tipW = el.offsetWidth || 280
     const tipH = el.offsetHeight || 80
     const maxX = window.innerWidth - tipW - 8
     const maxY = window.innerHeight - tipH - 8
-    let x = anchorX
-    let y = anchorY + 4
+    let x = anchorLeft
+    // Prefer below, overlapping into the cell; flip above if it would leave the viewport.
+    let y = cellBottom - CELL_TIP_OVERLAP_PX
     if (y + tipH > window.innerHeight - 8) {
-      y = anchorY - tipH - 4
+      y = cellTop - tipH + CELL_TIP_OVERLAP_PX
     }
     if (x + tipW > window.innerWidth - 8) {
       x = maxX
@@ -243,7 +249,7 @@ export function ExcelView({ path, name }: Props) {
     // Same cell: keep tip still so the pointer can reach Copy without the panel fleeing.
     if (cellTipKeyRef.current === key) return
     const rect = td.getBoundingClientRect()
-    cellTipPosRef.current = { x: rect.left, y: rect.bottom }
+    cellTipPosRef.current = { x: rect.left, y: rect.bottom, top: rect.top }
     cellTipKeyRef.current = key
     setCellTipCopied(false)
     setCellTip({ text, row, col })
@@ -251,11 +257,26 @@ export function ExcelView({ path, name }: Props) {
 
   useLayoutEffect(() => {
     if (!cellTip) return
-    placeCellTip(cellTipPosRef.current.x, cellTipPosRef.current.y)
+    const pos = cellTipPosRef.current
+    placeCellTip(pos.x, pos.top, pos.y)
   }, [cellTip])
 
+  const pointerOverCellTip = (clientX: number, clientY: number) => {
+    const tip = cellTipRef.current
+    if (!tip) return false
+    const r = tip.getBoundingClientRect()
+    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom
+  }
+
   const onSheetPointerMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (dragRef.current || cellTipPinnedRef.current) return
+    if (dragRef.current) return
+    // Tip is portaled outside the sheet; if it overlays the table, treat that as pinned hover.
+    if (pointerOverCellTip(e.clientX, e.clientY)) {
+      cellTipPinnedRef.current = true
+      clearCellTipHideTimer()
+      return
+    }
+    if (cellTipPinnedRef.current) return
     const td = (e.target as HTMLElement | null)?.closest?.('td')
     if (!td || !tableRef.current?.contains(td)) {
       scheduleHideCellTip()
@@ -275,8 +296,20 @@ export function ExcelView({ path, name }: Props) {
     showCellTip(row, col, text, td)
   }
 
-  const onSheetPointerLeave = () => {
+  const onSheetPointerLeave = (e: React.MouseEvent<HTMLDivElement>) => {
     if (cellTipPinnedRef.current) return
+    const related = e.relatedTarget as Node | null
+    if (related && cellTipRef.current?.contains(related)) {
+      cellTipPinnedRef.current = true
+      clearCellTipHideTimer()
+      return
+    }
+    // Leaving into the tip overlay (relatedTarget may be null across portal / WebView).
+    if (pointerOverCellTip(e.clientX, e.clientY)) {
+      cellTipPinnedRef.current = true
+      clearCellTipHideTimer()
+      return
+    }
     scheduleHideCellTip()
   }
 
@@ -394,40 +427,56 @@ export function ExcelView({ path, name }: Props) {
           </div>
         ) : null}
       </div>
-      {cellTip ? (
-        <div
-          ref={cellTipRef}
-          className="office-cell-tip"
-          role="tooltip"
-          onMouseEnter={() => {
-            cellTipPinnedRef.current = true
-            clearCellTipHideTimer()
-          }}
-          onMouseLeave={() => {
-            cellTipPinnedRef.current = false
-            scheduleHideCellTip()
-          }}
-        >
-          <pre className="office-cell-tip-text">{cellTip.text}</pre>
-          <button
-            type="button"
-            className="office-cell-tip-copy"
-            title="Copy cell"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              void onCopyCellTip()
-            }}
-          >
-            {cellTipCopied ? 'Copied' : 'Copy'}
-          </button>
-        </div>
-      ) : null}
+      {cellTip
+        ? createPortal(
+            <div
+              ref={cellTipRef}
+              className="office-cell-tip"
+              role="tooltip"
+              onMouseEnter={() => {
+                cellTipPinnedRef.current = true
+                clearCellTipHideTimer()
+              }}
+              onMouseLeave={() => {
+                cellTipPinnedRef.current = false
+                scheduleHideCellTip()
+              }}
+            >
+              <pre className="office-cell-tip-text">{cellTip.text}</pre>
+              <button
+                type="button"
+                className="office-cell-tip-copy"
+                title="Copy cell"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  void onCopyCellTip()
+                }}
+                onPointerDown={(e) => {
+                  // Keep tip pinned through the click; sheet leave must not race-hide it.
+                  e.stopPropagation()
+                  cellTipPinnedRef.current = true
+                  clearCellTipHideTimer()
+                }}
+              >
+                {cellTipCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
+  // Wails production WebView often blocks navigator.clipboard; runtime API is reliable.
+  try {
+    const ok = await ClipboardSetText(text)
+    if (ok) return true
+  } catch {
+    /* fall through */
+  }
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text)
