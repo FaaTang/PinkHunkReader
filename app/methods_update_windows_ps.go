@@ -14,6 +14,7 @@ $Target = $env:GONAVI_UPDATE_TARGET
 $Staged = $env:GONAVI_UPDATE_STAGED
 $LogFile = $env:GONAVI_UPDATE_LOG
 $HostPid = [int]$env:GONAVI_UPDATE_PID
+$WindowId = [string]$env:GONAVI_UPDATE_WINDOW_ID
 
 function Write-UpdateLog([string]$Message) {
   $line = '[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
@@ -112,11 +113,17 @@ function Replace-TargetExecutable([string]$SourceExe, [string]$TargetExe) {
 function Start-UpdatedApplication([string]$TargetExe) {
   $targetDir = [System.IO.Path]::GetDirectoryName($TargetExe)
   # Reader is a GUI app: relaunch visible. Only the updater PowerShell stays hidden (same as PinkHunkDB launcher).
-  $proc = Start-Process -FilePath $TargetExe -WorkingDirectory $targetDir -WindowStyle Normal -PassThru -ErrorAction Stop
+  # Pass window id so the new build restores the same session after update (single instance, not a blank sibling).
+  if (-not [string]::IsNullOrWhiteSpace($WindowId)) {
+    $argLine = '--window-id={0} --restore' -f $WindowId.Trim()
+    $proc = Start-Process -FilePath $TargetExe -ArgumentList $argLine -WorkingDirectory $targetDir -WindowStyle Normal -PassThru -ErrorAction Stop
+  } else {
+    $proc = Start-Process -FilePath $TargetExe -WorkingDirectory $targetDir -WindowStyle Normal -PassThru -ErrorAction Stop
+  }
   if (-not $proc -or $proc.HasExited) {
     throw "relaunch failed for target: $TargetExe"
   }
-  Write-UpdateLog ("started updated application: pid={0} path={1}" -f $proc.Id, $TargetExe)
+  Write-UpdateLog ("started updated application: pid={0} path={1} windowId={2}" -f $proc.Id, $TargetExe, $WindowId)
 }
 
 function Update-ShortcutsToTarget([string]$OldExe, [string]$NewExe) {
@@ -235,12 +242,13 @@ try {
 	return strings.ReplaceAll(script, "\n", "\r\n")
 }
 
-func windowsUpdateScriptEnv(source, target, stagedDir, logPath string, pid int) []string {
+func windowsUpdateScriptEnv(source, target, stagedDir, logPath string, pid int, windowID string) []string {
 	return []string{
 		"GONAVI_UPDATE_SOURCE=" + source,
 		"GONAVI_UPDATE_TARGET=" + target,
 		"GONAVI_UPDATE_STAGED=" + stagedDir,
 		"GONAVI_UPDATE_LOG=" + logPath,
 		"GONAVI_UPDATE_PID=" + strconv.Itoa(pid),
+		"GONAVI_UPDATE_WINDOW_ID=" + strings.TrimSpace(windowID),
 	}
 }

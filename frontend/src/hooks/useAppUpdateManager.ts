@@ -79,12 +79,15 @@ function formatBytes(bytes?: number) {
 
 export function useAppUpdateManager(opts?: {
   onPromptUpdate?: () => void
+  onBeforeInstall?: () => Promise<void>
 }) {
   const checkInFlight = useRef(false)
   const downloadInFlight = useRef(false)
   const downloadedVersionRef = useRef<string | null>(null)
   const onPromptRef = useRef(opts?.onPromptUpdate)
   onPromptRef.current = opts?.onPromptUpdate
+  const onBeforeInstallRef = useRef(opts?.onBeforeInstall)
+  onBeforeInstallRef.current = opts?.onBeforeInstall
   const [prefs, setPrefs] = useState<UpdatePreferences>(() => loadUpdatePreferences())
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [status, setStatus] = useState('Not checked')
@@ -214,6 +217,9 @@ export function useAppUpdateManager(opts?: {
     setBusy(true)
     setError('')
     try {
+      if (onBeforeInstallRef.current) {
+        await onBeforeInstallRef.current()
+      }
       const res = (await InstallUpdateAndRestart()) as QueryResult
       if (!res?.success) {
         setError(res?.message || 'Install failed')

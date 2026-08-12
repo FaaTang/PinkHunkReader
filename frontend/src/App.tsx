@@ -117,6 +117,8 @@ function AppShell() {
   const [revealNonce, setRevealNonce] = useState(0)
   const [untitledSeq, setUntitledSeq] = useState(1)
   const [sessionReady, setSessionReady] = useState(false)
+  /** Block empty persist until launch restore finishes (or is skipped), so a failed restore cannot wipe a good session. */
+  const sessionPersistAllowedRef = useRef(false)
   const [explorerOpen, setExplorerOpenState] = useState(loadExplorerOpen)
   const setExplorerOpen = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
     setExplorerOpenState((prev) => {
@@ -171,10 +173,6 @@ function AppShell() {
     rememberRecent,
   } = useAppSettings()
 
-  const update = useAppUpdateManager({
-    onPromptUpdate: () => openSettings('about'),
-  })
-
   const activeTab = useMemo(
     () => tabs.find((t) => t.path === activePath) ?? null,
     [tabs, activePath],
@@ -205,11 +203,20 @@ function AppShell() {
   const persistSession = useCallback((): Promise<void> => {
     const id = windowIdRef.current
     if (!id) return Promise.resolve()
+    const roots = rootsRef.current
+    const tabsNow = tabsRef.current
+    if (roots.length || tabsNow.length) {
+      sessionPersistAllowedRef.current = true
+    }
+    // Never overwrite a good on-disk session with an empty in-memory state before restore completes.
+    if (!sessionPersistAllowedRef.current && roots.length === 0 && tabsNow.length === 0) {
+      return Promise.resolve()
+    }
     const state = buildSession(
       id,
-      rootsRef.current,
+      roots,
       activePathRef.current,
-      tabsRef.current,
+      tabsNow,
       untitledSeqRef.current,
     )
     return SaveWindowSession(define.WindowSessionState.createFrom({
@@ -234,6 +241,16 @@ function AppShell() {
       /* ignore persist errors */
     })
   }, [])
+
+  const update = useAppUpdateManager({
+    onPromptUpdate: () => openSettings('about'),
+    onBeforeInstall: async () => {
+      await Promise.race([
+        persistSession(),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+      ])
+    },
+  })
 
   useEffect(() => {
     if (!sessionReady) return
@@ -418,6 +435,7 @@ function AppShell() {
     let cancelled = false
     const isCancelled = () => cancelled
     ;(async () => {
+      let allowEmptyPersist = true
       try {
         const launch = await GetLaunchInfo()
         if (cancelled) return
@@ -431,6 +449,7 @@ function AppShell() {
         if (cancelled) return
 
         if (launch?.shouldRestore && id) {
+          allowEmptyPersist = false
           const raw = await LoadWindowSession(id)
           const session: SessionState = {
             version: 2,
@@ -443,6 +462,8 @@ function AppShell() {
           if (session.roots.length || session.tabs.length) {
             await applySessionState(session, isCancelled)
           }
+          // Restore path finished (possibly empty session on disk) — empty writes are intentional.
+          allowEmptyPersist = true
         } else if (launch?.openPath || (Array.isArray(launch?.openPaths) && launch.openPaths.length)) {
           const launchPaths = [
             ...((launch?.openPaths as string[] | undefined) ?? []),
@@ -490,8 +511,12 @@ function AppShell() {
         }
       } catch (e) {
         if (!cancelled) setError(String(e))
+        // Keep allowEmptyPersist=false when restore was in progress and failed.
       } finally {
-        if (!cancelled) setSessionReady(true)
+        if (!cancelled) {
+          sessionPersistAllowedRef.current = allowEmptyPersist
+          setSessionReady(true)
+        }
       }
     })()
     return () => {

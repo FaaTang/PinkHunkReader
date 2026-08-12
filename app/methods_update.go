@@ -250,7 +250,7 @@ func (a *App) InstallUpdateAndRestart() define.QueryResult {
 		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.no_downloaded_package", nil)}
 	}
 
-	if err := launchUpdateScript(staged); err != nil {
+	if err := a.launchUpdateScript(staged); err != nil {
 		log.Printf("启动更新脚本失败: %v", err)
 		detail := a.localizedUpdateError(err)
 		msg := updateText("app.update.backend.message.install_launch_failed", map[string]any{"detail": detail})
@@ -268,6 +268,13 @@ func (a *App) InstallUpdateAndRestart() define.QueryResult {
 			},
 		}
 	}
+
+	// Persist a one-shot restore hint before quitting so the relaunched process
+	// reopens this window only (even if CLI args are dropped).
+	_ = withWindowStore(func(configDir string) error {
+		return writeUpdateRestoreHint(configDir, a.windowID)
+	})
+	_ = a.MarkWindowDead(a.windowID)
 
 	go func() {
 		time.Sleep(300 * time.Millisecond)
@@ -994,8 +1001,9 @@ func (a *App) emitUpdateDownloadProgress(status string, downloaded, total int64,
 	wailsRuntime.EventsEmit(a.ctx, updateDownloadProgressEvent, payload)
 }
 
-func launchUpdateScript(staged *stagedUpdate) error {
+func (a *App) launchUpdateScript(staged *stagedUpdate) error {
 	pid := os.Getpid()
+	windowID := strings.TrimSpace(a.windowID)
 
 	switch stdRuntime.GOOS {
 	case "windows":
@@ -1003,21 +1011,21 @@ func launchUpdateScript(staged *stagedUpdate) error {
 		if err != nil {
 			return err
 		}
-		return launchWindowsUpdate(staged, exePath, pid)
+		return launchWindowsUpdate(staged, exePath, pid, windowID)
 	case "darwin":
 		exePath, err := os.Executable()
 		if err != nil {
 			return err
 		}
 		exePath, _ = filepath.EvalSymlinks(exePath)
-		return launchMacUpdate(staged, exePath, pid)
+		return launchMacUpdate(staged, exePath, pid, windowID)
 	case "linux":
 		exePath, err := os.Executable()
 		if err != nil {
 			return err
 		}
 		exePath, _ = filepath.EvalSymlinks(exePath)
-		return launchLinuxUpdate(staged, exePath, pid)
+		return launchLinuxUpdate(staged, exePath, pid, windowID)
 	default:
 		return localizedUpdateError{
 			key:    "app.update.backend.error.install_unsupported",
@@ -1026,7 +1034,7 @@ func launchUpdateScript(staged *stagedUpdate) error {
 	}
 }
 
-func launchWindowsUpdate(staged *stagedUpdate, targetExe string, pid int) error {
+func launchWindowsUpdate(staged *stagedUpdate, targetExe string, pid int, windowID string) error {
 	scriptPath := filepath.Join(staged.StagedDir, "update.ps1")
 	logPath := strings.TrimSpace(staged.InstallLogPath)
 	if logPath == "" {
@@ -1038,9 +1046,9 @@ func launchWindowsUpdate(staged *stagedUpdate, targetExe string, pid int) error 
 		return err
 	}
 
-	log.Printf("启动 Windows 更新脚本：target=%s script=%s log=%s", targetExe, scriptPath, logPath)
+	log.Printf("启动 Windows 更新脚本：target=%s script=%s log=%s windowId=%s", targetExe, scriptPath, logPath, windowID)
 	cmd := buildWindowsLaunchCommand(scriptPath)
-	cmd.Env = append(os.Environ(), windowsUpdateScriptEnv(staged.FilePath, targetExe, staged.StagedDir, logPath, pid)...)
+	cmd.Env = append(os.Environ(), windowsUpdateScriptEnv(staged.FilePath, targetExe, staged.StagedDir, logPath, pid, windowID)...)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -1052,7 +1060,7 @@ func launchWindowsUpdate(staged *stagedUpdate, targetExe string, pid int) error 
 	return nil
 }
 
-func launchMacUpdate(staged *stagedUpdate, targetExe string, pid int) error {
+func launchMacUpdate(staged *stagedUpdate, targetExe string, pid int, windowID string) error {
 	targetApp := resolveMacUpdateTarget(targetExe)
 	mountDir := filepath.Join(staged.StagedDir, "mnt")
 	if err := os.MkdirAll(mountDir, 0o755); err != nil {
@@ -1065,19 +1073,19 @@ func launchMacUpdate(staged *stagedUpdate, targetExe string, pid int) error {
 	}
 
 	scriptPath := filepath.Join(staged.StagedDir, "update.sh")
-	content := buildMacScript(staged.FilePath, targetApp, staged.StagedDir, mountDir, logPath, pid)
+	content := buildMacScript(staged.FilePath, targetApp, staged.StagedDir, mountDir, logPath, pid, windowID)
 	if err := os.WriteFile(scriptPath, []byte(content), 0o755); err != nil {
 		return err
 	}
 
 	cmd := exec.Command("/bin/bash", scriptPath)
-	log.Printf("启动 macOS 更新脚本：target=%s script=%s log=%s", targetApp, scriptPath, logPath)
+	log.Printf("启动 macOS 更新脚本：target=%s script=%s log=%s windowId=%s", targetApp, scriptPath, logPath, windowID)
 	return cmd.Start()
 }
 
-func launchLinuxUpdate(staged *stagedUpdate, targetExe string, pid int) error {
+func launchLinuxUpdate(staged *stagedUpdate, targetExe string, pid int, windowID string) error {
 	scriptPath := filepath.Join(staged.StagedDir, "update.sh")
-	content := buildLinuxScript(staged.FilePath, targetExe, staged.StagedDir, pid)
+	content := buildLinuxScript(staged.FilePath, targetExe, staged.StagedDir, pid, windowID)
 	if err := os.WriteFile(scriptPath, []byte(content), 0o755); err != nil {
 		return err
 	}
@@ -1101,7 +1109,27 @@ func buildWindowsLaunchCommand(scriptPath string) *exec.Cmd {
 	return cmd
 }
 
-func buildMacScript(dmgPath, targetApp, stagedDir, mountDir, logPath string, pid int) string {
+func buildMacScript(dmgPath, targetApp, stagedDir, mountDir, logPath string, pid int, windowID string) string {
+	windowID = strings.TrimSpace(windowID)
+	relaunch := `relaunch_app() {
+  if /usr/bin/open -n "$TARGET_APP" >>"$LOG_FILE" 2>&1; then
+    return 0
+  fi
+  log "open -n failed, trying binary launch"
+  "$TARGET_APP/$APP_BIN_REL" >>"$LOG_FILE" 2>&1 &
+  return 0
+}`
+	if windowID != "" {
+		relaunch = fmt.Sprintf(`relaunch_app() {
+  RESTORE_ARGS=(--window-id=%s --restore)
+  if /usr/bin/open -n "$TARGET_APP" --args "${RESTORE_ARGS[@]}" >>"$LOG_FILE" 2>&1; then
+    return 0
+  fi
+  log "open -n failed, trying binary launch"
+  "$TARGET_APP/$APP_BIN_REL" "${RESTORE_ARGS[@]}" >>"$LOG_FILE" 2>&1 &
+  return 0
+}`, windowID)
+	}
 	return fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 PID=%d
@@ -1166,14 +1194,7 @@ replace_app_direct() {
   return 0
 }
 
-relaunch_app() {
-  if /usr/bin/open -n "$TARGET_APP" >>"$LOG_FILE" 2>&1; then
-    return 0
-  fi
-  log "open -n failed, trying binary launch"
-  "$TARGET_APP/$APP_BIN_REL" >>"$LOG_FILE" 2>&1 &
-  return 0
-}
+%s
 
 log "updater started"
 while kill -0 $PID 2>/dev/null; do
@@ -1204,10 +1225,15 @@ hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
 rm -rf "$MOUNT_DIR" "$DMG" "$STAGED" >>"$LOG_FILE" 2>&1 || true
 relaunch_app
 log "relaunch requested"
-	`, pid, dmgPath, targetApp, stagedDir, mountDir, logPath)
+	`, pid, dmgPath, targetApp, stagedDir, mountDir, logPath, relaunch)
 }
 
-func buildLinuxScript(tarPath, targetExe, stagedDir string, pid int) string {
+func buildLinuxScript(tarPath, targetExe, stagedDir string, pid int, windowID string) string {
+	windowID = strings.TrimSpace(windowID)
+	relaunch := `"$TARGET" &`
+	if windowID != "" {
+		relaunch = fmt.Sprintf(`"$TARGET" --window-id=%s --restore &`, windowID)
+	}
 	return fmt.Sprintf(`#!/bin/bash
 set -e
 PID=%d
@@ -1233,8 +1259,8 @@ fi
 cp -f "$NEWBIN" "$TARGET"
 chmod +x "$TARGET"
 rm -rf "$TMPDIR" "$ARCHIVE" "$STAGED"
-"$TARGET" &
-`, pid, tarPath, targetExe, stagedDir)
+%s
+`, pid, tarPath, targetExe, stagedDir, relaunch)
 }
 
 func detectMacAppPath(exePath string) string {

@@ -78,18 +78,28 @@ func (a *App) resolveLaunch(opts launchOptions) launchOptions {
 			if opts.OpenPath == "" && len(opts.OpenPaths) == 0 {
 				opts.ShouldRestore = true
 			}
+			// One-shot update hint is consumed so a later cold start does not double-restore.
+			_ = os.Remove(updateRestoreHintPath(configDir))
+			return nil
+		}
+
+		// Post-update relaunch: restore exactly the window that initiated the update.
+		// Do not spawn sibling stale windows (those look like "a new empty instance").
+		if hintID := consumeUpdateRestoreHintLocked(configDir); hintID != "" {
+			opts.WindowID = hintID
+			opts.ShouldRestore = true
+			opts.SpawnRestores = nil
+			a.windowID = hintID
 			return nil
 		}
 
 		stale := staleWindowIDsLocked(m)
 		live := hasLiveWindowLocked(m)
 		if len(stale) > 0 && !live {
-			// Crash recovery: this process takes the first stale window; spawn the rest.
-			opts.WindowID = stale[0]
+			primary, spawn := prioritizeRestorableWindowIDs(configDir, stale)
+			opts.WindowID = primary
 			opts.ShouldRestore = true
-			if len(stale) > 1 {
-				opts.SpawnRestores = append([]string{}, stale[1:]...)
-			}
+			opts.SpawnRestores = spawn
 			a.windowID = opts.WindowID
 			return nil
 		}

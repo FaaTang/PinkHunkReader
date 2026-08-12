@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	windowsManifestName = "windows.json"
-	openPrefsFileName   = "open_prefs.json"
-	sessionsDirName     = "sessions"
+	windowsManifestName   = "windows.json"
+	openPrefsFileName     = "open_prefs.json"
+	sessionsDirName       = "sessions"
+	updateRestoreHintName = "update_restore.json"
 )
 
 var windowStoreMu sync.Mutex
@@ -157,6 +158,39 @@ func (a *App) RegisterWindow(windowID string) error {
 	})
 }
 
+// MarkWindowDead clears the live PID for a window while keeping the session file.
+// Call on intentional quit / update restart so the next cold start (or relaunch with
+// --window-id) can restore even if Windows reuses the old PID for another process.
+func (a *App) MarkWindowDead(windowID string) error {
+	windowID = strings.TrimSpace(windowID)
+	if windowID == "" {
+		windowID = a.windowID
+	}
+	if windowID == "" {
+		return nil
+	}
+	return withWindowStore(func(configDir string) error {
+		m, err := loadWindowManifestLocked(configDir)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UnixMilli()
+		changed := false
+		for i := range m.Windows {
+			if m.Windows[i].ID == windowID {
+				m.Windows[i].PID = 0
+				m.Windows[i].UpdatedAt = now
+				changed = true
+				break
+			}
+		}
+		if !changed {
+			return nil
+		}
+		return saveWindowManifestLocked(configDir, m)
+	})
+}
+
 // UnregisterWindow removes a window from the restore manifest and deletes its session file.
 // Used when abandoning a window (e.g. failed spawn), not on normal title-bar quit —
 // quit must keep the session so the next launch can restore open tabs.
@@ -206,7 +240,8 @@ func (a *App) SaveWindowSession(state define.WindowSessionState) error {
 		for i := range m.Windows {
 			if m.Windows[i].ID == state.WindowID {
 				m.Windows[i].UpdatedAt = now
-				if m.Windows[i].PID == 0 {
+				// PID==0 means MarkWindowDead (quit/update). Never revive it from a late persist.
+				if m.Windows[i].PID > 0 && m.Windows[i].PID != os.Getpid() && !processAlive(m.Windows[i].PID) {
 					m.Windows[i].PID = os.Getpid()
 				}
 				found = true
@@ -334,4 +369,102 @@ func staleWindowIDsLocked(m windowManifest) []string {
 		}
 	}
 	return out
+}
+
+type updateRestoreHint struct {
+	WindowID  string `json:"windowId"`
+	UpdatedAt int64  `json:"updatedAt"`
+}
+
+func updateRestoreHintPath(configDir string) string {
+	return filepath.Join(configDir, updateRestoreHintName)
+}
+
+func writeUpdateRestoreHint(configDir, windowID string) error {
+	windowID = strings.TrimSpace(windowID)
+	if windowID == "" {
+		return nil
+	}
+	return writeJSONAtomic(updateRestoreHintPath(configDir), updateRestoreHint{
+		WindowID:  windowID,
+		UpdatedAt: time.Now().UnixMilli(),
+	})
+}
+
+// consumeUpdateRestoreHintLocked reads and deletes a one-shot post-update restore hint.
+// Returns empty string when absent/stale.
+func consumeUpdateRestoreHintLocked(configDir string) string {
+	path := updateRestoreHintPath(configDir)
+	var hint updateRestoreHint
+	if err := readJSONFile(path, &hint); err != nil {
+		return ""
+	}
+	_ = os.Remove(path)
+	id := strings.TrimSpace(hint.WindowID)
+	if id == "" {
+		return ""
+	}
+	// Ignore hints older than 30 minutes (leftover from a failed update).
+	if hint.UpdatedAt > 0 && time.Now().UnixMilli()-hint.UpdatedAt > 30*60*1000 {
+		return ""
+	}
+	return id
+}
+
+func sessionHasRestorableContentLocked(configDir, windowID string) bool {
+	var state define.WindowSessionState
+	if err := readJSONFile(sessionFilePath(configDir, windowID), &state); err != nil {
+		return false
+	}
+	if len(state.Roots) > 0 {
+		return true
+	}
+	return len(state.Tabs) > 0
+}
+
+// prioritizeRestorableWindowIDs puts sessions with roots/tabs first and drops empty orphans
+// from the spawn list so an update/crash recovery does not open a blank second window.
+func prioritizeRestorableWindowIDs(configDir string, ids []string) (primary string, spawn []string) {
+	if len(ids) == 0 {
+		return "", nil
+	}
+	rich := make([]string, 0, len(ids))
+	empty := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if sessionHasRestorableContentLocked(configDir, id) {
+			rich = append(rich, id)
+		} else {
+			empty = append(empty, id)
+		}
+	}
+	if len(rich) == 0 {
+		// All empty: keep a single blank window id (first), do not spawn more blanks.
+		return ids[0], nil
+	}
+	primary = rich[0]
+	if len(rich) > 1 {
+		spawn = append(spawn, rich[1:]...)
+	}
+	// Drop empty orphans from the manifest so they cannot become a later "new instance".
+	for _, id := range empty {
+		_ = os.Remove(sessionFilePath(configDir, id))
+	}
+	if len(empty) > 0 {
+		m, err := loadWindowManifestLocked(configDir)
+		if err == nil {
+			next := make([]windowManifestEntry, 0, len(m.Windows))
+			drop := map[string]struct{}{}
+			for _, id := range empty {
+				drop[id] = struct{}{}
+			}
+			for _, w := range m.Windows {
+				if _, ok := drop[w.ID]; !ok {
+					next = append(next, w)
+				}
+			}
+			m.Windows = next
+			_ = saveWindowManifestLocked(configDir, m)
+		}
+	}
+	return primary, spawn
 }

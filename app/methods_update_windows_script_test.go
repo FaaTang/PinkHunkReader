@@ -24,8 +24,10 @@ func TestBuildWindowsPowerShellUpdateScriptUsesEnvPaths(t *testing.T) {
 		`Expand-Archive -Path $SourcePath`,
 		`function Resolve-LaunchTarget`,
 		`target filename differs, renaming to latest`,
-		`Start-Process -FilePath $TargetExe -WorkingDirectory $targetDir -WindowStyle Normal -PassThru -ErrorAction Stop`,
-		`Write-UpdateLog ("started updated application: pid={0} path={1}" -f $proc.Id, $TargetExe)`,
+		`$WindowId = [string]$env:GONAVI_UPDATE_WINDOW_ID`,
+		`$argLine = '--window-id={0} --restore' -f $WindowId.Trim()`,
+		`Start-Process -FilePath $TargetExe -ArgumentList $argLine -WorkingDirectory $targetDir -WindowStyle Normal -PassThru -ErrorAction Stop`,
+		`Write-UpdateLog ("started updated application: pid={0} path={1} windowId={2}" -f $proc.Id, $TargetExe, $WindowId)`,
 		`Update-ShortcutsToTarget -OldExe $TargetExe -NewExe $renamedTarget`,
 		`$launchTarget = Resolve-LaunchTarget -SourceExe $sourceExe -TargetExe $Target`,
 		`Start-UpdatedApplication -TargetExe $launchTarget`,
@@ -55,6 +57,7 @@ func TestWindowsUpdateScriptEnv(t *testing.T) {
 		`C:\Users\admin\AppData\Local\Temp\PinkHunkReader-updates\.PinkHunkReader-update-windows-1.0.10`,
 		`C:\Users\admin\AppData\Local\Temp\PinkHunkReader-updates\update-install.log`,
 		99999,
+		`win-restore-1`,
 	)
 	want := []string{
 		`GONAVI_UPDATE_SOURCE=C:\tmp\PinkHunkReader-1.0.10-Windows-Amd64.exe`,
@@ -62,6 +65,7 @@ func TestWindowsUpdateScriptEnv(t *testing.T) {
 		`GONAVI_UPDATE_STAGED=C:\Users\admin\AppData\Local\Temp\PinkHunkReader-updates\.PinkHunkReader-update-windows-1.0.10`,
 		`GONAVI_UPDATE_LOG=C:\Users\admin\AppData\Local\Temp\PinkHunkReader-updates\update-install.log`,
 		`GONAVI_UPDATE_PID=99999`,
+		`GONAVI_UPDATE_WINDOW_ID=win-restore-1`,
 	}
 	if len(env) != len(want) {
 		t.Fatalf("unexpected env length: got %d want %d", len(env), len(want))
