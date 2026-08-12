@@ -46,6 +46,9 @@ func main() {
 		Windows: &windows.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
+			// Keep WebView2 under a stable folder so portable/versioned exe names
+			// do not create a new %APPDATA%\<BinaryName.exe> directory on every update.
+			WebviewUserDataPath: resolveWindowsWebviewUserDataPath(),
 		},
 		Mac: &mac.Options{
 			// Native traffic lights stay top-left; content draws under the titlebar.

@@ -773,3 +773,55 @@
   font-weight: 600;
   background: color-mix(in srgb, var(--ph-bg-chrome) 80%, transparent);
 }
+
+.office-cell-tip {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 16px));
+  max-height: min(240px, calc(100vh - 16px));
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--ph-br-2);
+  border-radius: 8px;
+  background: var(--ph-bg-panel);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  pointer-events: auto;
+}
+
+.office-cell-tip-text {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ph-fg-2);
+}
+
+.office-cell-tip-copy {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--ph-br-2);
+  border-radius: 6px;
+  background: var(--ph-bg-chrome);
+  color: var(--ph-fg-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.office-cell-tip-copy:hover {
+  background: var(--ph-accent-soft);
+  border-color: var(--ph-accent);
+  color: var(--ph-fg-1);
+}
+
+.office-cell-tip-copy:active {
+  background: color-mix(in srgb, var(--ph-accent-soft) 70%, var(--ph-accent));
+}

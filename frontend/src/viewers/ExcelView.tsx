@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { ReadBytes } from '../../wailsjs/go/app/App'
 import { ViewerLoading } from '../components/ViewerLoading'
@@ -13,6 +13,12 @@ interface Props {
 type SheetGrid = {
   name: string
   rows: string[][]
+}
+
+type CellHoverTip = {
+  text: string
+  row: number
+  col: number
 }
 
 const MAX_ROWS = 2000
@@ -44,6 +50,13 @@ export function ExcelView({ path, name }: Props) {
     startW: number
     pointerId: number
   } | null>(null)
+  const cellTipRef = useRef<HTMLDivElement | null>(null)
+  const cellTipPinnedRef = useRef(false)
+  const cellTipHideTimerRef = useRef<number | null>(null)
+  const cellTipPosRef = useRef({ x: 0, y: 0 })
+  const cellTipKeyRef = useRef('')
+  const [cellTip, setCellTip] = useState<CellHoverTip | null>(null)
+  const [cellTipCopied, setCellTipCopied] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -179,6 +192,112 @@ export function ExcelView({ path, name }: Props) {
     commitWidths(next)
   }
 
+  const clearCellTipHideTimer = () => {
+    if (cellTipHideTimerRef.current != null) {
+      window.clearTimeout(cellTipHideTimerRef.current)
+      cellTipHideTimerRef.current = null
+    }
+  }
+
+  const hideCellTip = () => {
+    clearCellTipHideTimer()
+    cellTipPinnedRef.current = false
+    cellTipKeyRef.current = ''
+    setCellTip(null)
+    setCellTipCopied(false)
+  }
+
+  const scheduleHideCellTip = () => {
+    clearCellTipHideTimer()
+    cellTipHideTimerRef.current = window.setTimeout(() => {
+      if (cellTipPinnedRef.current) return
+      hideCellTip()
+    }, 160)
+  }
+
+  const placeCellTip = (clientX: number, clientY: number) => {
+    const el = cellTipRef.current
+    if (!el) return
+    const pad = 12
+    const tipW = el.offsetWidth || 280
+    const tipH = el.offsetHeight || 80
+    const maxX = window.innerWidth - tipW - 8
+    const maxY = window.innerHeight - tipH - 8
+    const x = Math.max(8, Math.min(clientX + pad, maxX))
+    const y = Math.max(8, Math.min(clientY + pad, maxY))
+    el.style.left = `${x}px`
+    el.style.top = `${y}px`
+  }
+
+  const showCellTip = (row: number, col: number, text: string, clientX: number, clientY: number) => {
+    clearCellTipHideTimer()
+    cellTipPosRef.current = { x: clientX, y: clientY }
+    const key = `${row}:${col}`
+    if (cellTipKeyRef.current === key) {
+      placeCellTip(clientX, clientY)
+      return
+    }
+    cellTipKeyRef.current = key
+    setCellTipCopied(false)
+    setCellTip({ text, row, col })
+  }
+
+  useLayoutEffect(() => {
+    if (!cellTip) return
+    placeCellTip(cellTipPosRef.current.x, cellTipPosRef.current.y)
+  }, [cellTip])
+
+  const onSheetPointerMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (dragRef.current || cellTipPinnedRef.current) return
+    const td = (e.target as HTMLElement | null)?.closest?.('td')
+    if (!td || !tableRef.current?.contains(td)) {
+      scheduleHideCellTip()
+      return
+    }
+    const row = Number(td.getAttribute('data-r'))
+    const col = Number(td.getAttribute('data-c'))
+    if (!Number.isFinite(row) || !Number.isFinite(col) || !current) {
+      scheduleHideCellTip()
+      return
+    }
+    const text = current.rows[row]?.[col] ?? ''
+    if (!text) {
+      scheduleHideCellTip()
+      return
+    }
+    showCellTip(row, col, text, e.clientX, e.clientY)
+  }
+
+  const onSheetPointerLeave = () => {
+    if (cellTipPinnedRef.current) return
+    scheduleHideCellTip()
+  }
+
+  const onSheetScroll = () => {
+    hideCellTip()
+  }
+
+  const onCopyCellTip = async () => {
+    if (!cellTip?.text) return
+    const ok = await copyTextToClipboard(cellTip.text)
+    if (ok) {
+      setCellTipCopied(true)
+      window.setTimeout(() => setCellTipCopied(false), 1200)
+    }
+  }
+
+  useEffect(() => {
+    return () => clearCellTipHideTimer()
+  }, [])
+
+  useEffect(() => {
+    clearCellTipHideTimer()
+    cellTipPinnedRef.current = false
+    cellTipKeyRef.current = ''
+    setCellTip(null)
+    setCellTipCopied(false)
+  }, [active, path])
+
   if (error) {
     return <div className="empty" style={{ color: 'var(--ph-danger)' }}>{error}</div>
   }
@@ -207,7 +326,12 @@ export function ExcelView({ path, name }: Props) {
       <div className="office-body media-wrap-loading-host">
         <ViewerLoading visible={loading} label="Loading Excel…" detail={name} />
         {!loading && current ? (
-          <div className="office-sheet-wrap">
+          <div
+            className="office-sheet-wrap"
+            onMouseMove={onSheetPointerMove}
+            onMouseLeave={onSheetPointerLeave}
+            onScroll={onSheetScroll}
+          >
             {current.rows.length === 0 ? (
               <div className="empty">Empty sheet</div>
             ) : (
@@ -250,7 +374,7 @@ export function ExcelView({ path, name }: Props) {
                       {Array.from({ length: colCount }, (_, ci) => {
                         const text = row[ci] ?? ''
                         return (
-                          <td key={ci} title={text || undefined}>
+                          <td key={ci} data-r={ri} data-c={ci}>
                             {text}
                           </td>
                         )
@@ -263,8 +387,62 @@ export function ExcelView({ path, name }: Props) {
           </div>
         ) : null}
       </div>
+      {cellTip ? (
+        <div
+          ref={cellTipRef}
+          className="office-cell-tip"
+          role="tooltip"
+          onMouseEnter={() => {
+            cellTipPinnedRef.current = true
+            clearCellTipHideTimer()
+          }}
+          onMouseLeave={() => {
+            cellTipPinnedRef.current = false
+            scheduleHideCellTip()
+          }}
+        >
+          <pre className="office-cell-tip-text">{cellTip.text}</pre>
+          <button
+            type="button"
+            className="office-cell-tip-copy"
+            title="Copy cell"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              void onCopyCellTip()
+            }}
+          >
+            {cellTipCopied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
 }
 
 function cellToString(v: unknown): string {

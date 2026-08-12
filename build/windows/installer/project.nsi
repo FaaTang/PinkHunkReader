@@ -100,7 +100,8 @@ SectionEnd
 Section "uninstall"
     !insertmacro wails.setShellContext
 
-    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
+    RMDir /r "$AppData\PinkHunkReader\WebView2" # Stable WebView2 DataPath
+    RMDir /r "$AppData\${PRODUCT_EXECUTABLE}"   # Legacy WebView2 DataPath (%APPDATA%\<exe>)
 
     RMDir /r $INSTDIR
 
