@@ -16,6 +16,11 @@ import {
   saveRecentMax,
   trimRecentFiles,
 } from './recentFiles'
+import {
+  type AutoSavePreferences,
+  loadAutoSavePreferences,
+  saveAutoSavePreferences,
+} from './autoSavePreferences'
 
 export type GoToKind = 'page' | 'line'
 
@@ -37,6 +42,9 @@ interface AppSettingsValue {
   setRecentMax: (n: number) => void
   rememberRecent: (path: string) => void
   clearRecent: () => void
+  autoSave: AutoSavePreferences
+  setAutoSaveEnabled: (enabled: boolean) => void
+  setAutoSaveIntervalSeconds: (seconds: number) => void
   goToTarget: GoToTarget | null
   registerGoTo: (target: GoToTarget | null) => void
   goToOpen: boolean
@@ -55,6 +63,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => loadShortcuts())
   const [recentMax, setRecentMaxState] = useState(() => loadRecentMax())
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => loadRecentFiles(loadRecentMax()))
+  const [autoSave, setAutoSaveState] = useState<AutoSavePreferences>(() => loadAutoSavePreferences())
   const [goToOpen, setGoToOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
@@ -89,6 +98,14 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setRecentFiles(clearRecentFiles())
   }, [])
 
+  const setAutoSaveEnabled = useCallback((enabled: boolean) => {
+    setAutoSaveState((prev) => saveAutoSavePreferences({ ...prev, enabled }))
+  }, [])
+
+  const setAutoSaveIntervalSeconds = useCallback((seconds: number) => {
+    setAutoSaveState((prev) => saveAutoSavePreferences({ ...prev, intervalSeconds: seconds }))
+  }, [])
+
   const registerGoTo = useCallback((target: GoToTarget | null) => {
     goToTargetRef.current = target
     setGoToTarget(target)
@@ -103,6 +120,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setRecentMax,
     rememberRecent,
     clearRecent,
+    autoSave,
+    setAutoSaveEnabled,
+    setAutoSaveIntervalSeconds,
     goToTarget,
     registerGoTo,
     goToOpen,
@@ -127,6 +147,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setRecentMax,
     rememberRecent,
     clearRecent,
+    autoSave,
+    setAutoSaveEnabled,
+    setAutoSaveIntervalSeconds,
     goToTarget,
     registerGoTo,
     goToOpen,

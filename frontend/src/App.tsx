@@ -111,7 +111,7 @@ function AppShell() {
   const [activePath, setActivePath] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('Open a folder or file to start')
-  const [saving, setSaving] = useState(false)
+  const [savePhase, setSavePhase] = useState<'idle' | 'manual' | 'auto'>('idle')
   const [treeRefresh, setTreeRefresh] = useState(0)
   const [revealPath, setRevealPath] = useState<string | null>(null)
   const [revealNonce, setRevealNonce] = useState(0)
@@ -155,12 +155,15 @@ function AppShell() {
   const placementResolverRef = useRef<((c: OpenPlacementChoice | 'cancel') => void) | null>(null)
   const parentFolderResolverRef = useRef<((c: OpenParentFolderChoice | 'cancel') => void) | null>(null)
   const quittingRef = useRef(false)
+  const savePhaseRef = useRef<'idle' | 'manual' | 'auto'>('idle')
+  const autoSaveBusyRef = useRef(false)
 
   tabsRef.current = tabs
   activePathRef.current = activePath
   rootsRef.current = roots
   windowIdRef.current = windowId
   untitledSeqRef.current = untitledSeq
+  savePhaseRef.current = savePhase
 
   const { fullscreen, toggle: toggleFullscreen, exit: exitFullscreen } = useAppFullscreen()
   const {
@@ -171,7 +174,10 @@ function AppShell() {
     settingsOpen,
     goToTarget,
     rememberRecent,
+    autoSave,
   } = useAppSettings()
+
+  const saving = savePhase !== 'idle'
 
   const activeTab = useMemo(
     () => tabs.find((t) => t.path === activePath) ?? null,
@@ -734,12 +740,18 @@ function AppShell() {
     pagedSaveRef.current = fn
   }, [])
 
-  const saveTab = useCallback(async (tab: OpenTab): Promise<boolean> => {
+  const saveTab = useCallback(async (
+    tab: OpenTab,
+    opts?: { reason?: 'manual' | 'auto'; managePhase?: boolean },
+  ): Promise<boolean> => {
     if (!tab.editable) return true
-    setSaving(true)
+    const reason = opts?.reason ?? 'manual'
+    const managePhase = opts?.managePhase !== false
+    if (managePhase) setSavePhase(reason)
     setError('')
     try {
       if (tab.untitled) {
+        if (reason === 'auto') return false
         const dest = await PickAndSaveFile(tab.name.includes('.') ? tab.name : `${tab.name}.txt`)
         if (!dest) return false
         await WriteText(dest, tab.content)
@@ -782,20 +794,67 @@ function AppShell() {
       setTabs((prev) =>
         prev.map((t) => (t.path === tab.path ? { ...t, dirty: false } : t)),
       )
-      setStatus(`Saved ${tab.name}`)
+      setStatus(reason === 'auto' ? `Auto-saved ${tab.name}` : `Saved ${tab.name}`)
       return true
     } catch (e) {
       setError(String(e))
       return false
     } finally {
-      setSaving(false)
+      if (managePhase) setSavePhase('idle')
     }
   }, [rememberRecent, syncRootsFromBackend])
 
   const saveActive = useCallback(async () => {
     if (!activeTab || !activeTab.editable) return
-    await saveTab(activeTab)
+    if (savePhaseRef.current !== 'idle') return
+    await saveTab(activeTab, { reason: 'manual' })
   }, [activeTab, saveTab])
+
+  const runAutoSave = useCallback(async () => {
+    if (!autoSave.enabled || quittingRef.current) return
+    if (savePhaseRef.current !== 'idle' || autoSaveBusyRef.current) return
+    if (closeResolverRef.current || placementResolverRef.current || parentFolderResolverRef.current) {
+      return
+    }
+    const candidates = tabsRef.current.filter((t) => {
+      if (!t.editable || !t.dirty || t.untitled) return false
+      if (t.largeMode && activePathRef.current !== t.path) return false
+      return true
+    })
+    if (!candidates.length) return
+    autoSaveBusyRef.current = true
+    setSavePhase('auto')
+    try {
+      let saved = 0
+      let lastName = ''
+      for (const candidate of candidates) {
+        const latest = tabsRef.current.find((t) => t.path === candidate.path)
+        if (!latest?.dirty || latest.untitled || !latest.editable) continue
+        if (latest.largeMode && activePathRef.current !== latest.path) continue
+        const ok = await saveTab(latest, { reason: 'auto', managePhase: false })
+        if (!ok) break
+        saved += 1
+        lastName = latest.name
+      }
+      if (saved === 1) {
+        setStatus(`Auto-saved ${lastName}`)
+      } else if (saved > 1) {
+        setStatus(`Auto-saved ${saved} files`)
+      }
+    } finally {
+      setSavePhase('idle')
+      autoSaveBusyRef.current = false
+    }
+  }, [autoSave.enabled, saveTab])
+
+  useEffect(() => {
+    if (!autoSave.enabled || !sessionReady) return
+    const ms = Math.max(1, autoSave.intervalSeconds) * 1000
+    const id = window.setInterval(() => {
+      void runAutoSave()
+    }, ms)
+    return () => window.clearInterval(id)
+  }, [autoSave.enabled, autoSave.intervalSeconds, runAutoSave, sessionReady])
 
   const removeTab = useCallback((path: string) => {
     setTabs((prev) => {
@@ -1261,9 +1320,15 @@ function AppShell() {
             className="toolbar-btn"
             disabled={(!activeTab.dirty && !activeTab.untitled) || saving}
             onClick={() => void saveActive()}
-            title={`Save (${formatShortcut(shortcuts.save)})`}
+            title={
+              savePhase === 'auto'
+                ? 'Auto-saving…'
+                : savePhase === 'manual'
+                  ? 'Saving…'
+                  : `Save (${formatShortcut(shortcuts.save)})`
+            }
           >
-            Save
+            {savePhase === 'auto' ? 'Auto-saving…' : savePhase === 'manual' ? 'Saving…' : 'Save'}
           </button>
         ) : null}
         {showJsonFormat ? (

@@ -7,6 +7,12 @@ import {
   formatShortcut,
 } from '../settings/shortcuts'
 import { MAX_RECENT_MAX, MIN_RECENT_MAX } from '../settings/recentFiles'
+import {
+  DEFAULT_AUTO_SAVE_INTERVAL_SECONDS,
+  MAX_AUTO_SAVE_INTERVAL_SECONDS,
+  MIN_AUTO_SAVE_INTERVAL_SECONDS,
+  clampAutoSaveIntervalSeconds,
+} from '../settings/autoSavePreferences'
 import type { useAppUpdateManager } from '../hooks/useAppUpdateManager'
 import { GetGlobalProxyConfig, GetOpenPlacementPrefs, GetShellIntegrationPrefs, SaveGlobalProxy, SaveOpenPlacementPrefs, SaveShellIntegrationPrefs } from '../../wailsjs/go/app/App'
 import {
@@ -38,7 +44,7 @@ const NAV: { id: SettingsSection; title: string; description: string }[] = [
   {
     id: 'general',
     title: 'General',
-    description: 'Recent files and other preferences',
+    description: 'Recent files, auto-save, and other preferences',
   },
   {
     id: 'shortcuts',
@@ -94,9 +100,13 @@ export function SettingsModal({ update }: Props) {
     setRecentMax,
     clearRecent,
     recentFiles,
+    autoSave,
+    setAutoSaveEnabled,
+    setAutoSaveIntervalSeconds,
   } = useAppSettings()
   const [capturing, setCapturing] = useState<ShortcutId | null>(null)
   const [recentDraft, setRecentDraft] = useState(String(recentMax))
+  const [autoSaveIntervalDraft, setAutoSaveIntervalDraft] = useState(String(autoSave.intervalSeconds))
   const [proxyDraft, setProxyDraft] = useState<ProxyDraft>(emptyProxyDraft)
   const [proxyBusy, setProxyBusy] = useState(false)
   const [proxyError, setProxyError] = useState('')
@@ -112,8 +122,11 @@ export function SettingsModal({ update }: Props) {
   }, [settingsOpen])
 
   useEffect(() => {
-    if (settingsOpen) setRecentDraft(String(recentMax))
-  }, [settingsOpen, recentMax])
+    if (settingsOpen) {
+      setRecentDraft(String(recentMax))
+      setAutoSaveIntervalDraft(String(autoSave.intervalSeconds))
+    }
+  }, [settingsOpen, recentMax, autoSave.intervalSeconds])
 
   useEffect(() => {
     if (settingsOpen && settingsSection === 'about') {
@@ -239,6 +252,17 @@ export function SettingsModal({ update }: Props) {
     setRecentMax(n)
   }
 
+  const applyAutoSaveInterval = () => {
+    const n = Math.floor(Number(autoSaveIntervalDraft))
+    if (!Number.isFinite(n)) {
+      setAutoSaveIntervalDraft(String(autoSave.intervalSeconds))
+      return
+    }
+    const clamped = clampAutoSaveIntervalSeconds(n)
+    setAutoSaveIntervalSeconds(clamped)
+    setAutoSaveIntervalDraft(String(clamped))
+  }
+
   const saveProxy = async () => {
     setProxyBusy(true)
     setProxyError('')
@@ -345,7 +369,7 @@ export function SettingsModal({ update }: Props) {
                 <div className="settings-section-head">
                   <div className="settings-section-title">General</div>
                   <div className="settings-section-desc">
-                    Recent files appear under the Open menu.
+                    Recent files, auto-save, and shell / open preferences.
                   </div>
                 </div>
                 <div className="settings-list">
@@ -388,6 +412,48 @@ export function SettingsModal({ update }: Props) {
                     >
                       Clear list
                     </button>
+                  </div>
+                  <div className="settings-row settings-row-stack">
+                    <label className="settings-check">
+                      <input
+                        type="checkbox"
+                        checked={autoSave.enabled}
+                        onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                      />
+                      <span>
+                        Auto-save
+                        <span className="settings-row-sub">
+                          Write dirty files to disk on an interval (untitled files still need Save As).
+                          Default on.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-label">
+                      Auto-save interval
+                      <span className="settings-row-sub">
+                        {MIN_AUTO_SAVE_INTERVAL_SECONDS}–{MAX_AUTO_SAVE_INTERVAL_SECONDS} seconds
+                        (default {DEFAULT_AUTO_SAVE_INTERVAL_SECONDS})
+                      </span>
+                    </span>
+                    <input
+                      className="settings-number"
+                      type="number"
+                      min={MIN_AUTO_SAVE_INTERVAL_SECONDS}
+                      max={MAX_AUTO_SAVE_INTERVAL_SECONDS}
+                      value={autoSaveIntervalDraft}
+                      disabled={!autoSave.enabled}
+                      onChange={(e) => setAutoSaveIntervalDraft(e.target.value.replace(/[^\d]/g, ''))}
+                      onBlur={applyAutoSaveInterval}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          applyAutoSaveInterval()
+                        }
+                      }}
+                      aria-label="Auto-save interval in seconds"
+                    />
                   </div>
                   <div className="settings-row settings-row-stack">
                     <label className="settings-check">

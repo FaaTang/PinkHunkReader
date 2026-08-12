@@ -191,10 +191,19 @@ func (a *App) InspectPath(path string) (define.PickOpenResult, error) {
 
 // PickAndSaveFile opens a save dialog and returns the chosen path (empty if cancelled).
 // Adds the file parent as a workspace root when needed so the save can proceed.
+// Defaults to Text (*.txt) like Notepad++: Windows uses the first filter as DefaultExtension,
+// and paths returned without an extension get ".txt" appended.
 func (a *App) PickAndSaveFile(defaultFilename string) (string, error) {
+	name := normalizeSaveDefaultFilename(defaultFilename)
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           "Save As",
-		DefaultFilename: defaultFilename,
+		DefaultFilename: name,
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Text files (*.txt)", Pattern: "*.txt"},
+			{DisplayName: "Markdown (*.md)", Pattern: "*.md"},
+			{DisplayName: "JSON (*.json)", Pattern: "*.json"},
+			{DisplayName: "All files (*.*)", Pattern: "*.*"},
+		},
 	})
 	if err != nil {
 		return "", err
@@ -202,11 +211,40 @@ func (a *App) PickAndSaveFile(defaultFilename string) (string, error) {
 	if path == "" {
 		return "", nil
 	}
+	path = ensureDefaultSaveExtension(path)
 	parent := filepath.Dir(path)
 	if err := a.AddRoot(parent); err != nil {
 		return "", err
 	}
 	return path, nil
+}
+
+// normalizeSaveDefaultFilename ensures the save dialog seed name has a usable extension.
+func normalizeSaveDefaultFilename(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "Untitled.txt"
+	}
+	base := filepath.Base(name)
+	ext := filepath.Ext(base)
+	if ext == "" || ext == "." {
+		return strings.TrimSuffix(name, ".") + ".txt"
+	}
+	return name
+}
+
+// ensureDefaultSaveExtension appends ".txt" when the chosen path has no extension.
+func ensureDefaultSaveExtension(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return path
+	}
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	if ext != "" && ext != "." {
+		return path
+	}
+	return strings.TrimSuffix(path, ".") + ".txt"
 }
 
 // GetRoot returns the first workspace root (back-compat).
