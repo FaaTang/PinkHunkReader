@@ -40,6 +40,8 @@ func (a *App) Startup(ctx context.Context) {
 	if a.launch.WindowID != "" {
 		_ = a.RegisterWindow(a.launch.WindowID)
 	}
+	// Restore user geometry when present; otherwise first-open dynamic size + center.
+	a.applyStartupWindowGeometry(ctx)
 }
 
 // BeforeClose is called when the user tries to close the window.
@@ -52,6 +54,7 @@ func (a *App) BeforeClose(ctx context.Context) (prevent bool) {
 	}
 	a.quitMu.Unlock()
 	if ok {
+		a.saveCurrentWindowGeometry(ctx)
 		return false
 	}
 	runtime.EventsEmit(ctx, "app:quit-requested")

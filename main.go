@@ -18,11 +18,13 @@ func main() {
 	application := app.NewApp()
 
 	err := wails.Run(&options.App{
-		Title:     "PinkHunkReader",
-		Width:     1280,
-		Height:    800,
-		MinWidth:  900,
-		MinHeight: 560,
+		Title:            "PinkHunkReader",
+		Width:            900,
+		Height:           560,
+		MinWidth:         900,
+		MinHeight:        560,
+		WindowStartState: options.Normal,
+		StartHidden:      true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
