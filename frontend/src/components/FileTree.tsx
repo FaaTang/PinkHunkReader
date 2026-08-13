@@ -179,6 +179,8 @@ export function FileTree({
   const [flashPath, setFlashPath] = useState<string | null>(null)
   const [selectedPaths, setSelectedPaths] = useState<string[]>([])
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null)
+  /** True while Ctrl / Shift / marquee / pinned folder selection owns the highlight. */
+  const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [marquee, setMarquee] = useState<{
     left: number
     top: number
@@ -188,8 +190,7 @@ export function FileTree({
   const treeRef = useRef<HTMLDivElement>(null)
   const selectedPathsRef = useRef(selectedPaths)
   const skipClickRef = useRef(false)
-  /** True while Ctrl / Shift / marquee owns selection; false = follow active file. */
-  const multiSelectRef = useRef(false)
+  const multiSelectModeRef = useRef(false)
   const marqueeRafRef = useRef(0)
   const marqueeDragRef = useRef<{
     pointerId: number
@@ -199,11 +200,24 @@ export function FileTree({
     baseline: string[]
     dragging: boolean
   } | null>(null)
-  selectedPathsRef.current = selectedPaths
-  const selectedSet = useMemo(() => toSelectionSet(selectedPaths), [selectedPaths])
+  multiSelectModeRef.current = multiSelectMode
+  // When not multi-selecting, highlight must track activePath in the same render.
+  // Updating selectedPaths in an effect (or on click before open) left one frame of
+  // active:not(.selected) and flashed the pink inset bar on the previous file.
+  const effectiveSelectedPaths = multiSelectMode
+    ? selectedPaths
+    : activePath
+      ? [activePath]
+      : []
+  selectedPathsRef.current = effectiveSelectedPaths
+  const selectedSet = useMemo(
+    () => toSelectionSet(effectiveSelectedPaths),
+    [effectiveSelectedPaths],
+  )
 
   const restoreActiveSelection = useCallback(() => {
-    multiSelectRef.current = false
+    setMultiSelectMode(false)
+    multiSelectModeRef.current = false
     if (activePath) {
       setSelectedPaths([activePath])
       setSelectionAnchor(activePath)
@@ -279,12 +293,13 @@ export function FileTree({
   useEffect(() => {
     setSelectedPaths([])
     setSelectionAnchor(null)
-    multiSelectRef.current = false
+    setMultiSelectMode(false)
+    multiSelectModeRef.current = false
   }, [roots])
 
   useEffect(() => {
-    // Default interaction: selection follows the open file until a multi-select op.
-    if (multiSelectRef.current) return
+    // Keep selectedPaths aligned when following the open file (context menu / marquee baseline).
+    if (multiSelectModeRef.current) return
     if (activePath) {
       setSelectedPaths([activePath])
       setSelectionAnchor(activePath)
@@ -327,13 +342,12 @@ export function FileTree({
     if (menu) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setSelectedPaths([])
-        setSelectionAnchor(null)
+        restoreActiveSelection()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [menu])
+  }, [menu, restoreActiveSelection])
 
   useEffect(() => {
     if (!revealPath || revealNonce <= 0) return
@@ -370,7 +384,8 @@ export function FileTree({
           ),
         )
         setFlashPath(revealPath)
-        multiSelectRef.current = false
+        setMultiSelectMode(false)
+        multiSelectModeRef.current = false
         setSelectedPaths([revealPath])
         setSelectionAnchor(revealPath)
         window.setTimeout(() => {
@@ -397,6 +412,7 @@ export function FileTree({
   const applySelectionClick = (
     e: React.MouseEvent,
     path: string,
+    role: 'file' | 'dir' = 'file',
   ): { keepDefault: boolean } => {
     if (skipClickRef.current) {
       skipClickRef.current = false
@@ -405,7 +421,8 @@ export function FileTree({
     const additive = e.ctrlKey || e.metaKey
     const ranged = e.shiftKey
     if (ranged) {
-      multiSelectRef.current = true
+      setMultiSelectMode(true)
+      multiSelectModeRef.current = true
       const anchor = selectionAnchor ?? path
       const next = rangeSelect(visiblePaths, anchor, path)
       setSelectedPaths(next)
@@ -413,13 +430,24 @@ export function FileTree({
       return { keepDefault: false }
     }
     if (additive) {
-      multiSelectRef.current = true
-      setSelectedPaths((prev) => togglePathInList(prev, path))
+      setMultiSelectMode(true)
+      multiSelectModeRef.current = true
+      setSelectedPaths(() => togglePathInList(selectedPathsRef.current, path))
       setSelectionAnchor(path)
       return { keepDefault: false }
     }
-    // Plain click — original interaction: selection follows this open/toggle target.
-    multiSelectRef.current = false
+    // Plain click on a file: keep highlight on the current active file until
+    // activePath updates (effectiveSelectedPaths tracks it). Setting selection
+    // to the new path first caused a one-frame pink-bar flash on the old file.
+    if (role === 'file') {
+      setMultiSelectMode(false)
+      multiSelectModeRef.current = false
+      setSelectionAnchor(path)
+      return { keepDefault: true }
+    }
+    // Folder / group head: pin selection here; open file keeps the accent bar.
+    setMultiSelectMode(true)
+    multiSelectModeRef.current = true
     setSelectedPaths([path])
     setSelectionAnchor(path)
     return { keepDefault: true }
@@ -467,7 +495,8 @@ export function FileTree({
       if (Math.abs(dx) < MARQUEE_THRESHOLD_PX && Math.abs(dy) < MARQUEE_THRESHOLD_PX) return
       drag.dragging = true
       skipClickRef.current = true
-      multiSelectRef.current = true
+      setMultiSelectMode(true)
+      multiSelectModeRef.current = true
       try {
         tree.setPointerCapture(e.pointerId)
       } catch {
@@ -528,9 +557,11 @@ export function FileTree({
   const openContextMenu = (e: React.MouseEvent, clickedPath: string, _groupRoot: string) => {
     e.preventDefault()
     e.stopPropagation()
-    let targets = selectedPaths
-    if (!pathInList(selectedPaths, clickedPath)) {
+    let targets = effectiveSelectedPaths
+    if (!pathInList(effectiveSelectedPaths, clickedPath)) {
       targets = [clickedPath]
+      setMultiSelectMode(true)
+      multiSelectModeRef.current = true
       setSelectedPaths([clickedPath])
       setSelectionAnchor(clickedPath)
     }
@@ -597,7 +628,7 @@ export function FileTree({
                   title={g.root}
                   onClick={(e) => {
                     e.stopPropagation()
-                    const { keepDefault } = applySelectionClick(e, n.entry.path)
+                    const { keepDefault } = applySelectionClick(e, n.entry.path, 'file')
                     if (keepDefault) onOpenFile(n.entry.path)
                   }}
                 >
@@ -622,7 +653,7 @@ export function FileTree({
                 title={g.root}
                 onClick={(e) => {
                   e.stopPropagation()
-                  const { keepDefault } = applySelectionClick(e, g.root)
+                  const { keepDefault } = applySelectionClick(e, g.root, 'dir')
                   if (keepDefault) toggleGroup(g.root)
                 }}
               >
@@ -824,7 +855,7 @@ function TreeList({
   hiddenPaths: string[]
   onToggle: (path: string) => void
   onOpen: (path: string) => void
-  onSelectClick: (e: React.MouseEvent, path: string) => { keepDefault: boolean }
+  onSelectClick: (e: React.MouseEvent, path: string, role: 'file' | 'dir') => { keepDefault: boolean }
   onContextMenu: (e: React.MouseEvent, path: string) => void
 }) {
   const gutter = 8 + depth * 12
@@ -849,7 +880,8 @@ function TreeList({
                 ].filter(Boolean).join(' ')}
                 onClick={(e) => {
                   e.stopPropagation()
-                  const { keepDefault } = onSelectClick(e, n.entry.path)
+                  const role = n.entry.isDir ? 'dir' : 'file'
+                  const { keepDefault } = onSelectClick(e, n.entry.path, role)
                   if (!keepDefault) return
                   if (n.entry.isDir) onToggle(n.entry.path)
                   else onOpen(n.entry.path)
