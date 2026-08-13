@@ -462,7 +462,8 @@ function AppShell() {
         if (await WindowIsMaximised()) return
         const size = await WindowGetSize()
         const viewport = readBrowserScreenWorkArea()
-        if (!isCreatePlaceholderWindowBounds(size, viewport)) return
+        // Wails Size uses w/h, not width/height.
+        if (!isCreatePlaceholderWindowBounds({ width: size.w, height: size.h }, viewport)) return
         if (cancelled) return
         const next = resolveFirstOpenWindowBounds(viewport)
         WindowSetSize(next.width, next.height)
