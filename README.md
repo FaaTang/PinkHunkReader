@@ -16,7 +16,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 
 ## Features
 
-- **Folder workspace**: open a directory, tree navigation, multi-tabs; show/hide explorer (`Ctrl+,` / `Cmd+,` by default)
+- **Folder workspace**: open a directory, tree navigation, multi-tabs; Ctrl/Cmd+click, Shift+click, and drag-box multi-select; context menu can reveal or remove only the selected items (if a folder has no remaining items in the workspace, it is removed too; empty roots leave the workspace); Refresh re-lists all files under opened roots, including ones previously removed; show/hide explorer (`Ctrl+,` / `Cmd+,` by default)
 - **New file**: `Ctrl+N` / `Cmd+N`; prompt to save when closing dirty tabs
 - **Drag & drop / shell open**: drop files or folders onto the window; OS “Open with PinkHunkReader” uses the same open placement and parent-folder settings as in-app Open
 - **Session restore**: after quitting the last window, reopen its tabs/roots on next launch (not every window you closed earlier); window size and position are remembered
@@ -28,7 +28,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 - **Images**: PNG / JPG / GIF / WebP / SVG and more
 - **Large files**: text / Markdown above 2MB stream into the Monaco model chunk by chunk (Monaco's own virtualized rendering keeps it smooth), prefetching the next window near the bottom edge. Paging only affects loading — files stay **editable and saveable**; saving auto-drains any not-yet-loaded tail before write.
 - **Path sandbox**: all IO stays under the opened root
-- **Recent files**: listed under Open; count configurable in Settings → General (default 10)
+- **Recent files & folders**: listed under Open Recent; count configurable in Settings → General (default 10)
 - **Proxy & updates**: global proxy in Settings → Proxy; update check from About / preferences
 
 ## CI / Releases
@@ -88,6 +88,8 @@ Viewer routing is driven by `kind` (`markdown` / `text` / `pdf` / `image` / `exc
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+N` / macOS `Cmd+N` | New file |
+| `Ctrl+Shift+F` / macOS `Cmd+Shift+F` | Open file |
+| `Ctrl+Shift+D` / macOS `Cmd+Shift+D` | Open folder |
 | `Ctrl+S` / macOS `Cmd+S` | Save current editable tab |
 | `Ctrl+,` / macOS `Cmd+,` | Show / hide explorer |
 | `Ctrl+Shift+M` / macOS `Cmd+Shift+M` | JSON format / minify toggle |

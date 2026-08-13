@@ -1,3 +1,5 @@
+import { folderLabel, pathsEqual } from '../utils/pathHelpers'
+
 const RECENT_KEY = 'pinkhunk-reader.recent-files.v1'
 const RECENT_MAX_KEY = 'pinkhunk-reader.recent-max.v1'
 
@@ -8,11 +10,8 @@ export const MAX_RECENT_MAX = 30
 export interface RecentFile {
   path: string
   name: string
-}
-
-function fileName(path: string): string {
-  const slash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
-  return slash >= 0 ? path.slice(slash + 1) : path
+  /** True when the entry is a folder workspace root. */
+  isDir?: boolean
 }
 
 export function loadRecentMax(): number {
@@ -44,8 +43,9 @@ export function loadRecentFiles(max = loadRecentMax()): RecentFile[] {
       if (!item || typeof item !== 'object') continue
       const path = String((item as RecentFile).path || '').trim()
       if (!path) continue
-      const name = String((item as RecentFile).name || '').trim() || fileName(path)
-      out.push({ path, name })
+      const isDir = Boolean((item as RecentFile).isDir)
+      const name = String((item as RecentFile).name || '').trim() || folderLabel(path)
+      out.push({ path, name, isDir: isDir || undefined })
       if (out.length >= max) break
     }
     return out
@@ -59,12 +59,20 @@ export function saveRecentFiles(list: RecentFile[]) {
 }
 
 /** Put path at front; drop duplicates; trim to max. */
-export function pushRecentFile(path: string, max = loadRecentMax()): RecentFile[] {
+export function pushRecentFile(
+  path: string,
+  max = loadRecentMax(),
+  isDir = false,
+): RecentFile[] {
   const abs = path.trim()
   if (!abs) return loadRecentFiles(max)
-  const entry: RecentFile = { path: abs, name: fileName(abs) }
+  const entry: RecentFile = {
+    path: abs,
+    name: folderLabel(abs),
+    isDir: isDir || undefined,
+  }
   const prev = loadRecentFiles(Math.max(max, MAX_RECENT_MAX))
-  const next = [entry, ...prev.filter((f) => f.path !== abs)].slice(0, max)
+  const next = [entry, ...prev.filter((f) => !pathsEqual(f.path, abs))].slice(0, max)
   saveRecentFiles(next)
   return next
 }

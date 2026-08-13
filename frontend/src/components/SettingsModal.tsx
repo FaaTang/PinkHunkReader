@@ -29,6 +29,7 @@ import './SettingsModal.css'
 
 const ORDER: ShortcutId[] = [
   'open',
+  'openFolder',
   'newFile',
   'closeTab',
   'save',
@@ -44,7 +45,7 @@ const NAV: { id: SettingsSection; title: string; description: string }[] = [
   {
     id: 'general',
     title: 'General',
-    description: 'Recent files, auto-save, and other preferences',
+    description: 'Recent files & folders, auto-save, and other preferences',
   },
   {
     id: 'shortcuts',
@@ -369,13 +370,13 @@ export function SettingsModal({ update }: Props) {
                 <div className="settings-section-head">
                   <div className="settings-section-title">General</div>
                   <div className="settings-section-desc">
-                    Recent files, auto-save, and shell / open preferences.
+                    Recent files & folders, auto-save, and shell / open preferences.
                   </div>
                 </div>
                 <div className="settings-list">
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      Recent files to keep
+                      Recent items to keep
                       <span className="settings-row-sub">
                         {MIN_RECENT_MAX}–{MAX_RECENT_MAX} (default 10)
                       </span>
@@ -394,14 +395,14 @@ export function SettingsModal({ update }: Props) {
                           applyRecentMax()
                         }
                       }}
-                      aria-label="Recent files to keep"
+                      aria-label="Recent items to keep"
                     />
                   </div>
                   <div className="settings-row settings-row-stack">
                     <span className="settings-row-label">
                       Saved recently
                       <span className="settings-row-sub">
-                        {recentFiles.length} file{recentFiles.length === 1 ? '' : 's'}
+                        {recentFiles.length} item{recentFiles.length === 1 ? '' : 's'}
                       </span>
                     </span>
                     <button

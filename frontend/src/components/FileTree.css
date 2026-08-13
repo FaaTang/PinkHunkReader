@@ -1,54 +1,91 @@
 .tree {
+  position: relative;
   flex: 1;
   min-height: 0;
+  height: 100%;
   overflow: auto;
   padding: 6px 0;
+}
+
+.tree.tree-marqueeing {
+  cursor: crosshair;
+  user-select: none;
+}
+
+.tree-marquee {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 1px solid var(--ph-accent-2);
+  background: var(--ph-accent-soft);
+  opacity: 0.55;
 }
 
 .tree-group {
   margin-bottom: 4px;
 }
 
-.tree-group-head {
+.tree-line {
+  display: flex;
+  align-items: stretch;
+  min-height: 24px;
+}
+
+.tree-gutter {
+  flex-shrink: 0;
+  /* Left empty strip — start marquee / click-to-clear here */
+}
+
+.tree-group-head,
+.tree-row {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 4px 10px 4px 4px;
   cursor: pointer;
   user-select: none;
+  border-radius: 0;
+}
+
+.tree-group-head {
   color: var(--ph-fg-1);
   font-weight: 600;
   font-size: 12px;
 }
 
-.tree-group-head:hover {
-  background: var(--ph-bg-hover);
-}
-
-.tree-group-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .tree-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px 3px calc(8px + var(--depth, 0) * 12px);
-  cursor: pointer;
-  user-select: none;
+  padding-top: 3px;
+  padding-bottom: 3px;
   color: var(--ph-fg-2);
-  border-radius: 0;
 }
 
+.tree-group-head:hover,
 .tree-row:hover {
   background: var(--ph-bg-hover);
 }
 
-.tree-row.active {
+/* Open tab marker — not the same as multi-selection highlight */
+.tree-row.active:not(.selected),
+.tree-group-head.active:not(.selected) {
+  color: var(--ph-accent-2);
+  box-shadow: inset 2px 0 0 var(--ph-accent-2);
+}
+
+/* Multi-select / default selected highlight */
+.tree-row.selected,
+.tree-group-head.selected {
   background: var(--ph-bg-selected);
   color: var(--ph-accent-2);
+}
+
+.tree-group-name,
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-icon {
@@ -56,12 +93,6 @@
   color: var(--ph-fg-4);
   flex-shrink: 0;
   font-size: 11px;
-}
-
-.tree-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .tree-row.locate-flash {

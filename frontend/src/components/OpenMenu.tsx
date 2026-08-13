@@ -81,6 +81,7 @@ export function OpenMenu({
           <button
             type="button"
             role="menuitem"
+            title={`Open folder (${formatShortcut(shortcuts.openFolder)})`}
             onClick={() => {
               setOpen(false)
               onOpenFolder()
@@ -122,12 +123,15 @@ export function OpenMenu({
                       title={f.path}
                       onClick={() => pickRecent(f)}
                     >
-                      <span className="open-menu-recent-name">{f.name}</span>
+                      <span className="open-menu-recent-name">
+                        {f.isDir ? <span className="open-menu-recent-kind">Folder</span> : null}
+                        {f.name}
+                      </span>
                       <span className="open-menu-recent-path">{f.path}</span>
                     </button>
                   ))
                 ) : (
-                  <div className="open-menu-flyout-empty">No recent files</div>
+                  <div className="open-menu-flyout-empty">No recent items</div>
                 )}
               </div>
             ) : null}

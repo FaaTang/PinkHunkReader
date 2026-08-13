@@ -52,11 +52,11 @@ import {
   GetOpenPlacementPrefs,
   GetRoots,
   InspectPath,
+  ListDir,
   LoadWindowSession,
   PickAndOpen,
   PickAndSaveFile,
   ReadText,
-  RemoveRoot,
   RevealInFileManager,
   SaveOpenPlacementPrefs,
   SaveWindowSession,
@@ -81,6 +81,80 @@ import {
 
 function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
+}
+
+function uniquePathList(paths: string[]): string[] {
+  const out: string[] = []
+  for (const p of paths) {
+    if (!p || out.some((x) => pathsEqual(x, p))) continue
+    out.push(p)
+  }
+  return out
+}
+
+/** Hide path (and drop redundant descendants already covered by a broader hide). */
+function mergeHiddenPaths(prev: string[], add: string[]): string[] {
+  let next = [...prev]
+  for (const p of add) {
+    if (!p) continue
+    if (next.some((h) => pathUnderRoot(p, h))) continue
+    next = next.filter((h) => !pathUnderRoot(h, p))
+    next.push(p)
+  }
+  return next
+}
+
+function isPathHidden(path: string, hidden: string[]): boolean {
+  return hidden.some((h) => pathUnderRoot(path, h))
+}
+
+/**
+ * After hiding paths, collapse empty parents in the workspace tree.
+ * Empty intermediate folders are hidden; empty workspace roots are removed.
+ */
+async function collapseEmptyWorkspaceFolders(
+  roots: string[],
+  hidden: string[],
+  seedPaths: string[],
+): Promise<{ hidden: string[]; rootsToRemove: string[] }> {
+  let nextHidden = [...hidden]
+  const rootsToRemove: string[] = []
+  const queue: string[] = []
+  const enqueue = (p: string | null) => {
+    if (!p) return
+    if (!pathUnderAnyRoot(p, roots)) return
+    if (queue.some((q) => pathsEqual(q, p))) return
+    queue.push(p)
+  }
+  for (const seed of seedPaths) {
+    if (roots.some((r) => pathsEqual(r, seed))) {
+      enqueue(seed)
+    } else {
+      enqueue(parentDir(seed))
+    }
+  }
+  while (queue.length) {
+    const folder = queue.shift()!
+    if (isPathHidden(folder, nextHidden) && !roots.some((r) => pathsEqual(r, folder))) {
+      continue
+    }
+    let entries: { path: string }[] = []
+    try {
+      entries = await ListDir(folder)
+    } catch {
+      // Missing / unlistable folder — treat as empty in workspace.
+      entries = []
+    }
+    const visible = entries.filter((e) => !isPathHidden(e.path, nextHidden))
+    if (visible.length > 0) continue
+    if (roots.some((r) => pathsEqual(r, folder))) {
+      if (!rootsToRemove.some((r) => pathsEqual(r, folder))) rootsToRemove.push(folder)
+      continue
+    }
+    nextHidden = mergeHiddenPaths(nextHidden, [folder])
+    enqueue(parentDir(folder))
+  }
+  return { hidden: nextHidden, rootsToRemove }
 }
 
 /** Apply one close-save prompt choice over dirty tabs starting at `index`. */
@@ -128,6 +202,7 @@ function AppShell() {
   const [status, setStatus] = useState('Open a folder or file to start')
   const [savePhase, setSavePhase] = useState<'idle' | 'manual' | 'auto'>('idle')
   const [treeRefresh, setTreeRefresh] = useState(0)
+  const [treeHiddenPaths, setTreeHiddenPaths] = useState<string[]>([])
   const [revealPath, setRevealPath] = useState<string | null>(null)
   const [revealNonce, setRevealNonce] = useState(0)
   const [untitledSeq, setUntitledSeq] = useState(1)
@@ -165,6 +240,7 @@ function AppShell() {
   const tabsRef = useRef(tabs)
   const activePathRef = useRef(activePath)
   const rootsRef = useRef(roots)
+  const treeHiddenPathsRef = useRef(treeHiddenPaths)
   const windowIdRef = useRef(windowId)
   const untitledSeqRef = useRef(untitledSeq)
   const closeResolverRef = useRef<((c: CloseSaveChoice) => void) | null>(null)
@@ -178,6 +254,7 @@ function AppShell() {
   tabsRef.current = tabs
   activePathRef.current = activePath
   rootsRef.current = roots
+  treeHiddenPathsRef.current = treeHiddenPaths
   windowIdRef.current = windowId
   untitledSeqRef.current = untitledSeq
   savePhaseRef.current = savePhase
@@ -569,11 +646,13 @@ function AppShell() {
     const label = isDir ? folderLabel(path) : path.split(/[/\\]/).pop() || path
     if (choice === 'new') {
       await SpawnNewWindow(path, isDir)
+      rememberRecent(path, isDir)
       setStatus(`Opened in new window · ${label}`)
       return
     }
     if (isDir) {
       await ensureRoot(path)
+      rememberRecent(path, true)
       setStatus(`Opened folder · ${label}`)
       return
     }
@@ -588,7 +667,7 @@ function AppShell() {
       await ensureRoot(rootPath)
     }
     await openFile(path)
-  }, [ensureRoot, openFile, resolveOpenParentFolder])
+  }, [ensureRoot, openFile, rememberRecent, resolveOpenParentFolder])
 
   const openPathInPlacement = useCallback(async (path: string, isDir: boolean) => {
     const label = isDir ? folderLabel(path) : path.split(/[/\\]/).pop() || path
@@ -673,11 +752,20 @@ function AppShell() {
   const openRecent = useCallback(async (path: string) => {
     setError('')
     try {
-      if (pathUnderAnyRoot(path, rootsRef.current)) {
-        await openFile(path)
+      const probed = await InspectPath(path)
+      if (!probed?.path) {
+        setError('Path not found')
         return
       }
-      await openPathInPlacement(path, false)
+      if (probed.isDir) {
+        await openPathInPlacement(probed.path, true)
+        return
+      }
+      if (pathUnderAnyRoot(probed.path, rootsRef.current)) {
+        await openFile(probed.path)
+        return
+      }
+      await openPathInPlacement(probed.path, false)
     } catch (e) {
       setError(String(e))
     }
@@ -894,14 +982,37 @@ function AppShell() {
     await closeTabs(tabsRef.current.map((t) => t.path))
   }, [closeTabs])
 
-  const removeFromWorkspace = useCallback(async (rootPath: string) => {
+  const removeFromWorkspace = useCallback(async (paths: string[]) => {
     setError('')
-    const target = rootsRef.current.find((r) => pathsEqual(r, rootPath)) ?? rootPath
-    const remainingRoots = rootsRef.current.filter((r) => !pathsEqual(r, target))
+    const selected = uniquePathList(paths)
+    if (!selected.length) return
+    const currentRoots = rootsRef.current
+    let rootTargets = selected.filter((p) => currentRoots.some((r) => pathsEqual(r, p)))
+    const itemTargets = selected.filter((p) => !currentRoots.some((r) => pathsEqual(r, p)))
+    let nextHidden = mergeHiddenPaths(
+      treeHiddenPathsRef.current.filter((h) => pathUnderAnyRoot(h, currentRoots)),
+      itemTargets,
+    )
+    if (itemTargets.length) {
+      const collapsed = await collapseEmptyWorkspaceFolders(currentRoots, nextHidden, itemTargets)
+      nextHidden = collapsed.hidden
+      for (const r of collapsed.rootsToRemove) {
+        if (!rootTargets.some((t) => pathsEqual(t, r))) rootTargets.push(r)
+      }
+    }
+    rootTargets = uniquePathList(rootTargets)
+    const remainingRoots = currentRoots.filter(
+      (r) => !rootTargets.some((t) => pathsEqual(r, t)),
+    )
+    nextHidden = nextHidden.filter(
+      (h) =>
+        !rootTargets.some((r) => pathUnderRoot(h, r)) &&
+        remainingRoots.some((r) => pathUnderRoot(h, r)),
+    )
     const affected = tabsRef.current.filter((t) => {
       if (t.untitled) return false
-      if (!pathUnderRoot(t.path, target)) return false
-      // Keep tabs still covered by another remaining root.
+      if (nextHidden.some((h) => pathUnderRoot(t.path, h))) return true
+      if (!rootTargets.some((target) => pathUnderRoot(t.path, target))) return false
       return !pathUnderAnyRoot(t.path, remainingRoots)
     })
     const dirty = affected.filter((t) => t.dirty && t.editable)
@@ -913,7 +1024,11 @@ function AppShell() {
       if (result === 'done') break
     }
     try {
-      await RemoveRoot(target)
+      if (rootTargets.length) {
+        await SetRoots(remainingRoots)
+        setRoots(remainingRoots)
+      }
+      setTreeHiddenPaths(remainingRoots.length ? nextHidden : [])
       const drop = new Set(affected.map((t) => t.path))
       setTabs((prev) => {
         const next = prev.filter((t) => !drop.has(t.path))
@@ -922,11 +1037,13 @@ function AppShell() {
         }
         return next
       })
-      setRoots(remainingRoots)
       setTreeRefresh((n) => n + 1)
+      const total = selected.length
       setStatus(
         remainingRoots.length
-          ? `Removed ${folderLabel(target)} from workspace`
+          ? total === 1
+            ? `Removed ${folderLabel(selected[0])} from workspace`
+            : `Removed ${total} items from workspace`
           : 'No workspace',
       )
     } catch (e) {
@@ -960,6 +1077,7 @@ function AppShell() {
         return next
       })
       setRoots([])
+      setTreeHiddenPaths([])
       setTreeRefresh((n) => n + 1)
       setStatus('No workspace')
     } catch (e) {
@@ -1003,11 +1121,20 @@ function AppShell() {
     setRevealNonce((n) => n + 1)
   }, [setExplorerOpen])
 
-  const revealInOs = useCallback(async (path: string) => {
-    if (!path || path.startsWith('untitled:')) return
+  const revealInOs = useCallback(async (paths: string | string[]) => {
+    const list = (Array.isArray(paths) ? paths : [paths]).filter(
+      (p) => p && !p.startsWith('untitled:'),
+    )
+    if (!list.length) return
     try {
-      await RevealInFileManager(path)
-      setStatus(`Opened in file manager · ${folderLabel(path)}`)
+      for (const path of list) {
+        await RevealInFileManager(path)
+      }
+      setStatus(
+        list.length === 1
+          ? `Opened in file manager · ${folderLabel(list[0])}`
+          : `Opened ${list.length} items in file manager`,
+      )
       setError('')
     } catch (e) {
       setError(String(e))
@@ -1024,6 +1151,8 @@ function AppShell() {
     } catch {
       /* keep local roots */
     }
+    // Refresh re-lists every opened root from disk, including items previously removed from the explorer.
+    setTreeHiddenPaths([])
     setTreeRefresh((n) => n + 1)
     if (!activePath) {
       setStatus('Explorer refreshed')
@@ -1183,6 +1312,13 @@ function AppShell() {
         e.preventDefault()
         e.stopPropagation()
         void openPicked('file')
+        return
+      }
+      if (eventMatchesShortcut(e, shortcuts.openFolder)) {
+        if (typing && !(e.ctrlKey || e.metaKey)) return
+        e.preventDefault()
+        e.stopPropagation()
+        void openPicked('folder')
         return
       }
       if (eventMatchesShortcut(e, shortcuts.newFile)) {
@@ -1383,6 +1519,7 @@ function AppShell() {
               <div className="sidebar-tree-wrap">
                 <FileTree
                   roots={roots}
+                  hiddenPaths={treeHiddenPaths}
                   refreshToken={treeRefresh}
                   activePath={activePath}
                   revealPath={revealPath}

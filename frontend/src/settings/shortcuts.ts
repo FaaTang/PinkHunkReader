@@ -4,6 +4,7 @@ export type ShortcutId =
   | 'save'
   | 'newFile'
   | 'open'
+  | 'openFolder'
   | 'closeTab'
   | 'formatJson'
   | 'fullscreen'
@@ -26,6 +27,7 @@ export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
   save: 'Save file',
   newFile: 'New file',
   open: 'Open',
+  openFolder: 'Open folder',
   closeTab: 'Close tab',
   formatJson: 'Format / minify JSON',
   fullscreen: 'Toggle full screen',
@@ -39,6 +41,7 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
   save: { key: 's', ctrl: true },
   newFile: { key: 'n', ctrl: true },
   open: { key: 'f', ctrl: true, shift: true },
+  openFolder: { key: 'd', ctrl: true, shift: true },
   closeTab: { key: 'w', ctrl: true },
   formatJson: { key: 'l', ctrl: true, alt: true },
   fullscreen: { key: 'F11' },
@@ -59,6 +62,7 @@ export function loadShortcuts(): ShortcutMap {
       save: { ...DEFAULT_SHORTCUTS.save, ...parsed.save },
       newFile: { ...DEFAULT_SHORTCUTS.newFile, ...parsed.newFile },
       open: { ...DEFAULT_SHORTCUTS.open, ...parsed.open },
+      openFolder: { ...DEFAULT_SHORTCUTS.openFolder, ...parsed.openFolder },
       closeTab: { ...DEFAULT_SHORTCUTS.closeTab, ...parsed.closeTab },
       formatJson: { ...DEFAULT_SHORTCUTS.formatJson, ...parsed.formatJson },
       fullscreen: { ...DEFAULT_SHORTCUTS.fullscreen, ...parsed.fullscreen },

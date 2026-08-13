@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
     <linearGradient id="bg" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#ff8fc7"/>
-      <stop offset="48%" stop-color="#ff4da6"/>
-      <stop offset="100%" stop-color="#ff006e"/>
+      <stop offset="0%" stop-color="#ffb59a"/>
+      <stop offset="45%" stop-color="#ff6b4a"/>
+      <stop offset="100%" stop-color="#e83a22"/>
     </linearGradient>
     <linearGradient id="bgShine" x1="256" y1="32" x2="256" y2="240" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="pageFill" x1="256" y1="90" x2="256" y2="430" gradientUnits="userSpaceOnUse">
+    <linearGradient id="pageFill" x1="256" y1="80" x2="256" y2="430" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98"/>
-      <stop offset="100%" stop-color="#ffe4f0" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#ffe8e0" stop-opacity="0.92"/>
     </linearGradient>
     <filter id="softShadow" x="-25%" y="-15%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#b8004d" flood-opacity="0.35"/>
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#a02810" flood-opacity="0.35"/>
     </filter>
   </defs>
 
@@ -23,29 +23,40 @@
   <rect x="28" y="28" width="456" height="456" rx="92" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"/>
 
   <g filter="url(#softShadow)">
-    <g transform="translate(128 96)">
+    <g transform="translate(64 100)">
       <path
-        d="M24 16 H196 C214 16 228 30 228 48 V288 C228 306 214 320 196 320 H24 C6 320 -8 306 -8 288 V48 C-8 30 6 16 24 16 Z"
-        transform="translate(20 0)"
+        d="M192 20
+           C150 20 96 28 48 48
+           C28 56 16 72 16 92
+           L16 300
+           C16 320 28 336 48 344
+           C96 364 150 372 192 372
+           Z"
         fill="url(#pageFill)"
         stroke="#ffffff"
-        stroke-width="5"
-        stroke-opacity="0.85"
+        stroke-width="6"
+        stroke-opacity="0.9"
       />
       <path
-        d="M168 16 V64 C168 78 179 88 193 88 H236"
-        transform="translate(20 0)"
-        fill="none"
-        stroke="#ff4da6"
-        stroke-opacity="0.45"
+        d="M192 20
+           C234 20 288 28 336 48
+           C356 56 368 72 368 92
+           L368 300
+           C368 320 356 336 336 344
+           C288 364 234 372 192 372
+           Z"
+        fill="url(#pageFill)"
+        stroke="#ffffff"
         stroke-width="6"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+        stroke-opacity="0.9"
       />
-      <line x1="72" y1="140" x2="220" y2="140" stroke="#ff4da6" stroke-opacity="0.35" stroke-width="8" stroke-linecap="round"/>
-      <line x1="72" y1="180" x2="200" y2="180" stroke="#ff4da6" stroke-opacity="0.28" stroke-width="8" stroke-linecap="round"/>
-      <line x1="72" y1="220" x2="180" y2="220" stroke="#ff4da6" stroke-opacity="0.22" stroke-width="8" stroke-linecap="round"/>
-      <line x1="72" y1="260" x2="150" y2="260" stroke="#ff4da6" stroke-opacity="0.18" stroke-width="8" stroke-linecap="round"/>
+      <line x1="192" y1="28" x2="192" y2="364" stroke="#ff6b4a" stroke-opacity="0.35" stroke-width="8" stroke-linecap="round"/>
+      <line x1="56" y1="140" x2="160" y2="132" stroke="#ff6b4a" stroke-opacity="0.38" stroke-width="10" stroke-linecap="round"/>
+      <line x1="56" y1="190" x2="150" y2="182" stroke="#ff6b4a" stroke-opacity="0.28" stroke-width="10" stroke-linecap="round"/>
+      <line x1="56" y1="240" x2="140" y2="232" stroke="#ff6b4a" stroke-opacity="0.2" stroke-width="10" stroke-linecap="round"/>
+      <line x1="224" y1="132" x2="328" y2="140" stroke="#ff6b4a" stroke-opacity="0.38" stroke-width="10" stroke-linecap="round"/>
+      <line x1="234" y1="182" x2="328" y2="190" stroke="#ff6b4a" stroke-opacity="0.28" stroke-width="10" stroke-linecap="round"/>
+      <line x1="244" y1="232" x2="328" y2="240" stroke="#ff6b4a" stroke-opacity="0.2" stroke-width="10" stroke-linecap="round"/>
     </g>
   </g>
 </svg>

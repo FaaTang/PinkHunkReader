@@ -136,7 +136,9 @@ html.platform-mac {
 .sidebar-tree-wrap {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-drop-hint {

@@ -40,7 +40,7 @@ interface AppSettingsValue {
   recentFiles: RecentFile[]
   recentMax: number
   setRecentMax: (n: number) => void
-  rememberRecent: (path: string) => void
+  rememberRecent: (path: string, isDir?: boolean) => void
   clearRecent: () => void
   autoSave: AutoSavePreferences
   setAutoSaveEnabled: (enabled: boolean) => void
@@ -90,8 +90,8 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setRecentFiles(trimRecentFiles(clamped))
   }, [])
 
-  const rememberRecent = useCallback((path: string) => {
-    setRecentFiles(pushRecentFile(path, recentMax))
+  const rememberRecent = useCallback((path: string, isDir = false) => {
+    setRecentFiles(pushRecentFile(path, recentMax, isDir))
   }, [recentMax])
 
   const clearRecent = useCallback(() => {
