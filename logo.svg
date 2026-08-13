@@ -9,7 +9,7 @@
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="pageFill" x1="256" y1="80" x2="256" y2="430" gradientUnits="userSpaceOnUse">
+    <linearGradient id="pageFill" x1="256" y1="86" x2="256" y2="426" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98"/>
       <stop offset="100%" stop-color="#ffe8e0" stop-opacity="0.92"/>
     </linearGradient>
@@ -22,8 +22,9 @@
   <rect width="512" height="512" rx="112" fill="url(#bgShine)"/>
   <rect x="28" y="28" width="456" height="456" rx="92" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5"/>
 
+  <!-- Open book ~340×340, same frame as PinkHunkDB cylinder -->
   <g filter="url(#softShadow)">
-    <g transform="translate(64 100)">
+    <g transform="translate(86 86) scale(0.965909) translate(-16 -20)">
       <path
         d="M192 20
            C150 20 96 28 48 48
