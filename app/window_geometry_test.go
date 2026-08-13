@@ -32,3 +32,22 @@ func TestResolveFirstOpenWindowSizeRequiresScreen(t *testing.T) {
 		t.Fatalf("expected min first-open size 900x560, got %dx%d", width, height)
 	}
 }
+
+func TestIsCreatePlaceholderGeometry(t *testing.T) {
+	placeholder := &windowGeometry{Width: 900, Height: 560, X: 100, Y: 100}
+	if !isCreatePlaceholderGeometry(placeholder, 1920, 1080) {
+		t.Fatal("expected 900x560 to be treated as create placeholder on a large screen")
+	}
+	if !isCreatePlaceholderGeometry(placeholder, 0, 0) {
+		t.Fatal("expected 900x560 to be placeholder when screen size is unknown")
+	}
+	real := &windowGeometry{Width: 1400, Height: 900, X: 80, Y: 60}
+	if isCreatePlaceholderGeometry(real, 1920, 1080) {
+		t.Fatal("expected a real user size not to be treated as placeholder")
+	}
+	tinyScreen := &windowGeometry{Width: 900, Height: 560}
+	// On a screen that cannot host a meaningfully larger first-open size, keep it.
+	if isCreatePlaceholderGeometry(tinyScreen, 960, 600) {
+		t.Fatal("expected near-min size on a tiny screen not to force first-open rewrite")
+	}
+}

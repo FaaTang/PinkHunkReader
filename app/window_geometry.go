@@ -12,7 +12,7 @@ import (
 const (
 	windowGeometryFileName = "window_geometry.json"
 
-	// First-open target ~85% of the current screen (PinkHunkReader reference look).
+	// First-open target ~85% of the current screen (aligned with PinkHunkDB).
 	firstOpenWidthRatio  = 0.85
 	firstOpenHeightRatio = 0.85
 	firstOpenMinWidth    = 900
@@ -49,8 +49,9 @@ func persistWindowGeometry(configDir string, geo windowGeometry) error {
 
 func (a *App) applyStartupWindowGeometry(ctx context.Context) {
 	configDir := resolveAppConfigDir()
+	screenW, screenH := resolveScreenSize(ctx)
 	geo, err := loadWindowGeometry(configDir)
-	if err == nil && geo != nil && geo.Width >= 400 && geo.Height >= 300 {
+	if err == nil && geo != nil && geo.Width >= 400 && geo.Height >= 300 && !isCreatePlaceholderGeometry(geo, screenW, screenH) {
 		if geo.Maximized {
 			runtime.WindowMaximise(ctx)
 			runtime.WindowShow(ctx)
@@ -68,9 +69,19 @@ func (a *App) applyStartupWindowGeometry(ctx context.Context) {
 }
 
 func resolveFirstOpenWindowSize(ctx context.Context) (int, int) {
+	screenW, screenH := resolveScreenSize(ctx)
+	if screenW <= 0 || screenH <= 0 {
+		return firstOpenMinWidth, firstOpenMinHeight
+	}
+	width := clampInt(int(float64(screenW)*firstOpenWidthRatio), firstOpenMinWidth, screenW)
+	height := clampInt(int(float64(screenH)*firstOpenHeightRatio), firstOpenMinHeight, screenH)
+	return width, height
+}
+
+func resolveScreenSize(ctx context.Context) (int, int) {
 	screens, err := runtime.ScreenGetAll(ctx)
 	if err != nil || len(screens) == 0 {
-		return firstOpenMinWidth, firstOpenMinHeight
+		return 0, 0
 	}
 	screenW, screenH := 0, 0
 	for _, screen := range screens {
@@ -98,12 +109,30 @@ func resolveFirstOpenWindowSize(ctx context.Context) (int, int) {
 			}
 		}
 	}
-	if screenW <= 0 || screenH <= 0 {
-		return firstOpenMinWidth, firstOpenMinHeight
+	return screenW, screenH
+}
+
+// isCreatePlaceholderGeometry detects the StartHidden create size (≈900×560) that must
+// not stick as the restored window when a proper first-open size is available.
+func isCreatePlaceholderGeometry(geo *windowGeometry, screenW, screenH int) bool {
+	if geo == nil {
+		return true
 	}
-	width := clampInt(int(float64(screenW)*firstOpenWidthRatio), firstOpenMinWidth, screenW)
-	height := clampInt(int(float64(screenH)*firstOpenHeightRatio), firstOpenMinHeight, screenH)
-	return width, height
+	if geo.Width < 400 || geo.Height < 300 {
+		return true
+	}
+	nearCreateMin := geo.Width <= firstOpenMinWidth+8 && geo.Height <= firstOpenMinHeight+8
+	if !nearCreateMin {
+		return false
+	}
+	if screenW <= 0 || screenH <= 0 {
+		// Without a screen measurement, still treat the create min as a placeholder so
+		// the frontend can re-apply screen-ratio sizing after the webview is ready.
+		return true
+	}
+	firstW := clampInt(int(float64(screenW)*firstOpenWidthRatio), firstOpenMinWidth, screenW)
+	firstH := clampInt(int(float64(screenH)*firstOpenHeightRatio), firstOpenMinHeight, screenH)
+	return firstW >= geo.Width+80 || firstH >= geo.Height+80
 }
 
 func (a *App) saveCurrentWindowGeometry(ctx context.Context) {
@@ -125,6 +154,12 @@ func (a *App) saveCurrentWindowGeometry(ctx context.Context) {
 	if width < 400 || height < 300 {
 		return
 	}
+	screenW, screenH := resolveScreenSize(ctx)
+	candidate := &windowGeometry{Width: width, Height: height, X: x, Y: y, Maximized: maximised}
+	// Never persist the create-placeholder size as a real user preference.
+	if !maximised && isCreatePlaceholderGeometry(candidate, screenW, screenH) {
+		return
+	}
 	geo := windowGeometry{
 		Width:     width,
 		Height:    height,
@@ -134,10 +169,12 @@ func (a *App) saveCurrentWindowGeometry(ctx context.Context) {
 	}
 	if maximised {
 		if existing, loadErr := loadWindowGeometry(configDir); loadErr == nil && existing != nil && existing.Width >= 400 && existing.Height >= 300 {
-			geo.Width = existing.Width
-			geo.Height = existing.Height
-			geo.X = existing.X
-			geo.Y = existing.Y
+			if !isCreatePlaceholderGeometry(existing, screenW, screenH) {
+				geo.Width = existing.Width
+				geo.Height = existing.Height
+				geo.X = existing.X
+				geo.Y = existing.Y
+			}
 		}
 	}
 	_ = persistWindowGeometry(configDir, geo)

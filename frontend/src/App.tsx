@@ -41,6 +41,11 @@ import {
   pathsEqual,
 } from './utils/pathHelpers'
 import {
+  isCreatePlaceholderWindowBounds,
+  readBrowserScreenWorkArea,
+  resolveFirstOpenWindowBounds,
+} from './utils/windowInitialSize'
+import {
   AddRoot,
   ConfirmQuit,
   GetLaunchInfo,
@@ -62,7 +67,17 @@ import {
   WriteText,
 } from '../wailsjs/go/app/App'
 import { define } from '../wailsjs/go/models'
-import { EventsOn, OnFileDrop, OnFileDropOff, WindowShow, WindowUnminimise } from '../wailsjs/runtime/runtime'
+import {
+  EventsOn,
+  OnFileDrop,
+  OnFileDropOff,
+  WindowCenter,
+  WindowGetSize,
+  WindowIsMaximised,
+  WindowSetSize,
+  WindowShow,
+  WindowUnminimise,
+} from '../wailsjs/runtime/runtime'
 
 function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
@@ -437,6 +452,30 @@ function AppShell() {
     setActivePath(active)
     setStatus(`Restored ${restored.length} tab${restored.length === 1 ? '' : 's'}`)
   }, [restoreTabsFromSession])
+
+  // First-open / placeholder size: align with PinkHunkDB (~85% of screen work area).
+  // Go may restore a stuck 900×560 create size; browser screen metrics correct it after show.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (await WindowIsMaximised()) return
+        const size = await WindowGetSize()
+        const viewport = readBrowserScreenWorkArea()
+        if (!isCreatePlaceholderWindowBounds(size, viewport)) return
+        if (cancelled) return
+        const next = resolveFirstOpenWindowBounds(viewport)
+        WindowSetSize(next.width, next.height)
+        WindowCenter()
+        WindowShow()
+      } catch {
+        /* Wails runtime may be unavailable in browser preview */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Launch: window id, crash restore, CLI open, legacy migration.
   useEffect(() => {
