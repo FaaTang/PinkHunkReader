@@ -55,7 +55,12 @@ export function UpdateProgressDialog({
         </div>
         {message ? <p className="settings-error" style={{ marginTop: 10 }}>{message}</p> : null}
         <div className="goto-actions" style={{ marginTop: 14 }}>
-          <button type="button" className="toolbar-btn" onClick={onHide}>
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={onHide}
+            title="Hide — reopen from the toolbar or Settings → About"
+          >
             Hide
           </button>
           <span style={{ flex: 1 }} />

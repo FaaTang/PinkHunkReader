@@ -1336,6 +1336,20 @@ function AppShell() {
         >
           Settings
         </button>
+        {!update.progress.open && update.progress.status !== 'idle' ? (
+          <button
+            type="button"
+            className="toolbar-btn primary"
+            onClick={update.showProgress}
+            title="Show update download progress"
+          >
+            {update.progress.status === 'done'
+              ? 'Update ready'
+              : update.progress.status === 'error'
+                ? 'Download failed'
+                : `Downloading… ${Math.round(update.progress.percent)}%`}
+          </button>
+        ) : null}
         <div className="root-path" title={roots.join('\n')}>{rootsSummary}</div>
       </header>
 

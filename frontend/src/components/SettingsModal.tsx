@@ -736,7 +736,25 @@ export function SettingsModal({ update }: Props) {
                   >
                     Check for updates
                   </button>
-                  {update?.lastUpdate?.hasUpdate && !update.canInstall ? (
+                  {update
+                    && update.progress.status !== 'idle'
+                    && !update.progress.open ? (
+                    <button
+                      type="button"
+                      className="toolbar-btn primary"
+                      onClick={() => update.showProgress()}
+                    >
+                      {update.progress.status === 'done'
+                        ? 'Show update'
+                        : update.progress.status === 'error'
+                          ? 'Show download error'
+                          : `Show download progress (${Math.round(update.progress.percent)}%)`}
+                    </button>
+                  ) : null}
+                  {update?.lastUpdate?.hasUpdate
+                    && !update.canInstall
+                    && update.progress.status !== 'start'
+                    && update.progress.status !== 'downloading' ? (
                     <button
                       type="button"
                       className="toolbar-btn primary"
