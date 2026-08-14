@@ -17,7 +17,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 ## Features
 
 - **Folder workspace**: open a directory, tree navigation, multi-tabs; Ctrl/Cmd+click, Shift+click, and drag-box multi-select; context menu can reveal or remove only the selected items (if a folder has no remaining items in the workspace, it is removed too; empty roots leave the workspace); Refresh re-lists all files under opened roots, including ones previously removed; show/hide explorer (`Ctrl+,` / `Cmd+,` by default)
-- **New file**: `Ctrl+N` / `Cmd+N`; prompt to save when closing dirty tabs
+- **New file**: `Ctrl+N` / `Cmd+N`; prompt to save when closing dirty tabs. First Save As adds only that file to Explorer (not its parent folder)
 - **Drag & drop / shell open**: drop files or folders onto the window; OS “Open with PinkHunkReader” uses the same open placement and parent-folder settings as in-app Open
 - **Session restore**: after quitting the last window, reopen its tabs/roots on next launch (not every window you closed earlier); window size and position are remembered
 - **Auto-save**: optional interval auto-save for editable tabs (Settings → General)

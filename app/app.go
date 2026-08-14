@@ -191,7 +191,7 @@ func (a *App) InspectPath(path string) (define.PickOpenResult, error) {
 }
 
 // PickAndSaveFile opens a save dialog and returns the chosen path (empty if cancelled).
-// Adds the file parent as a workspace root when needed so the save can proceed.
+// Adds the chosen file (not its parent folder) as a workspace root when needed so the save can proceed.
 // Defaults to Text (*.txt) like Notepad++: Windows uses the first filter as DefaultExtension,
 // and paths returned without an extension get ".txt" appended.
 func (a *App) PickAndSaveFile(defaultFilename string) (string, error) {
@@ -213,11 +213,21 @@ func (a *App) PickAndSaveFile(defaultFilename string) (string, error) {
 		return "", nil
 	}
 	path = ensureDefaultSaveExtension(path)
-	parent := filepath.Dir(path)
-	if err := a.AddRoot(parent); err != nil {
+	if err := a.ensureSaveRoot(path); err != nil {
 		return "", err
 	}
 	return path, nil
+}
+
+// ensureSaveRoot makes dest writable under the sandbox without opening its parent folder.
+// If dest is already under a workspace root, this is a no-op.
+func (a *App) ensureSaveRoot(dest string) error {
+	if a.guard != nil {
+		if _, err := a.guard.Resolve(dest); err == nil {
+			return nil
+		}
+	}
+	return a.AddRoot(dest)
 }
 
 // normalizeSaveDefaultFilename ensures the save dialog seed name has a usable extension.
