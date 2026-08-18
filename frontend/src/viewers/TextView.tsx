@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MonacoEditor } from '../components/MonacoEditor'
 import { GoToButton } from '../components/GoToButton'
+import { ensureMonaco, isMonacoReady, whenMonacoReady } from '../monaco'
 import { useRegisterGoTo } from '../settings/AppSettingsContext'
 import { langFromPath } from '../utils/lang'
 import './viewers.css'
@@ -37,8 +38,16 @@ export function TextView({
   onChange,
 }: Props) {
   const editorRef = useRef<any>(null)
+  const [monacoReady, setMonacoReady] = useState(isMonacoReady())
   const lineCount = useMemo(() => Math.max(1, content.split(/\r?\n/).length), [content])
   const language = languageHint || langFromPath(path, name)
+  const useFastEditor = autoFocus && editable && !monacoReady
+
+  useEffect(() => {
+    void ensureMonaco().catch(() => {})
+    if (monacoReady) return
+    return whenMonacoReady(() => setMonacoReady(true))
+  }, [monacoReady])
 
   const goLine = useCallback((n: number) => {
     const ed = editorRef.current
@@ -95,30 +104,40 @@ export function TextView({
         <GoToButton />
       </div>
       <div className="editor-wrap" style={{ flex: 1 }}>
-        <MonacoEditor
-          height="100%"
-          language={language}
-          theme="vs"
-          value={content}
-          onMount={(ed) => {
-            editorRef.current = ed
-            if (autoFocus && editable) {
-              focusEditor(ed)
-              window.setTimeout(() => focusEditor(ed), 0)
-            }
-          }}
-          onChange={(v) => {
-            if (editable) onChange(v ?? '')
-          }}
-          options={{
-            readOnly: !editable,
-            minimap: { enabled: false },
-            fontSize: 13,
-            wordWrap: 'on',
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-          }}
-        />
+        {useFastEditor ? (
+          <textarea
+            className="editor-fast-input"
+            value={content}
+            autoFocus
+            spellCheck={false}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        ) : (
+          <MonacoEditor
+            height="100%"
+            language={language}
+            theme="vs"
+            value={content}
+            onMount={(ed) => {
+              editorRef.current = ed
+              if (autoFocus && editable) {
+                focusEditor(ed)
+                window.setTimeout(() => focusEditor(ed), 0)
+              }
+            }}
+            onChange={(v) => {
+              if (editable) onChange(v ?? '')
+            }}
+            options={{
+              readOnly: !editable,
+              minimap: { enabled: false },
+              fontSize: 13,
+              wordWrap: 'on',
+              scrollBeyondLastLine: true,
+              automaticLayout: true,
+            }}
+          />
+        )}
       </div>
     </div>
   )

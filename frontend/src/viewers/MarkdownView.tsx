@@ -129,7 +129,7 @@ export function MarkdownView({ path, content, editable, active = true, onChange 
                   minimap: { enabled: false },
                   fontSize: 13,
                   wordWrap: 'on',
-                  scrollBeyondLastLine: false,
+                  scrollBeyondLastLine: true,
                   automaticLayout: true,
                 }}
               />

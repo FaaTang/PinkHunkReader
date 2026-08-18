@@ -1,25 +1,22 @@
 import { useEffect, useState } from 'react'
 import Editor, { type EditorProps } from '@monaco-editor/react'
 import { ViewerLoading } from './ViewerLoading'
-import { ensureMonaco } from '../monaco'
+import { ensureMonaco, isMonacoReady, whenMonacoReady } from '../monaco'
 
 /** Thin wrapper that waits for local monaco before mounting the editor. */
 export function MonacoEditor(props: EditorProps) {
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(isMonacoReady())
 
   useEffect(() => {
-    let cancelled = false
-    void ensureMonaco()
-      .then(() => {
-        if (!cancelled) setReady(true)
-      })
-      .catch((err) => {
-        console.error('Monaco init failed', err)
-      })
-    return () => {
-      cancelled = true
-    }
+    void ensureMonaco().catch((err) => {
+      console.error('Monaco init failed', err)
+    })
   }, [])
+
+  useEffect(() => {
+    if (ready) return
+    return whenMonacoReady(() => setReady(true))
+  }, [ready])
 
   if (!ready) {
     return (
