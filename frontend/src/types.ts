@@ -37,6 +37,8 @@ export interface OpenTab {
   dirty: boolean
   /** In-memory buffer not yet saved to disk (Ctrl+N). */
   untitled?: boolean
+  /** Source path is gone; buffer kept in the editor (Save recreates the file). */
+  orphan?: boolean
   /** Monaco language override (e.g. after Format JSON on untitled). */
   languageHint?: string
 }

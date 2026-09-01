@@ -3,13 +3,13 @@ package fsx
 import (
 	"fmt"
 	"os"
+
+	"github.com/FaaTang/PinkHunkReader/define"
 )
 
-// MaxFullTextBytes soft cap when loading a whole text file into memory.
-const MaxFullTextBytes int64 = 8 * 1024 * 1024
-
 // ReadText reads an entire UTF-8 text file (rejects oversized files).
-func ReadText(g *Guard, path string) (string, error) {
+// maxBytes is the soft cap (typically the large-file threshold); ≤0 uses the default.
+func ReadText(g *Guard, path string, maxBytes int64) (string, error) {
 	abs, err := g.Resolve(path)
 	if err != nil {
 		return "", err
@@ -21,7 +21,10 @@ func ReadText(g *Guard, path string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("cannot read a directory")
 	}
-	if info.Size() > MaxFullTextBytes {
+	if maxBytes <= 0 {
+		maxBytes = define.DefaultLargeFileBytes
+	}
+	if info.Size() > maxBytes {
 		return "", fmt.Errorf("file too large; use ReadSlice")
 	}
 	data, err := os.ReadFile(abs)

@@ -29,6 +29,7 @@ type WindowSessionTab struct {
 	Size         int64  `json:"size"`
 	Dirty        bool   `json:"dirty"`
 	Untitled     bool   `json:"untitled"`
+	Orphan       bool   `json:"orphan,omitempty"`
 	LanguageHint string `json:"languageHint,omitempty"`
 	Content      string `json:"content,omitempty"`
 }
@@ -40,4 +41,10 @@ type OpenPlacementPrefs struct {
 	Mode               string `json:"mode"`               // "ask" | "always"
 	ParentFolderTarget string `json:"parentFolderTarget"` // "parent" | "file"
 	ParentFolderMode   string `json:"parentFolderMode"`   // "ask" | "always"
+}
+
+// EditorPrefs controls editor IO thresholds (persisted under config dir).
+type EditorPrefs struct {
+	// LargeFileThresholdMB: editable text/Markdown above this size use paged load.
+	LargeFileThresholdMB int `json:"largeFileThresholdMB"`
 }

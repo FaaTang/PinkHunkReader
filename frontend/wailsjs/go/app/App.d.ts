@@ -17,7 +17,11 @@ export function DetectKind(arg1:string):Promise<string>;
 
 export function DownloadUpdate():Promise<define.QueryResult>;
 
+export function FileExists(arg1:string):Promise<boolean>;
+
 export function GetAppInfo():Promise<define.QueryResult>;
+
+export function GetEditorPrefs():Promise<define.EditorPrefs>;
 
 export function GetGlobalProxyConfig():Promise<define.QueryResult>;
 
@@ -70,6 +74,8 @@ export function RegisterWindow(arg1:string):Promise<void>;
 export function RemoveRoot(arg1:string):Promise<void>;
 
 export function RevealInFileManager(arg1:string):Promise<void>;
+
+export function SaveEditorPrefs(arg1:define.EditorPrefs):Promise<define.EditorPrefs>;
 
 export function SaveGlobalProxy(arg1:app.GlobalProxyView):Promise<define.QueryResult>;
 

@@ -1,8 +1,10 @@
 import type { OpenTab } from '../types'
 
 const LEGACY_SESSION_KEY = 'pinkhunk-reader.session.v1'
-/** Persist buffer content up to this size (bytes, UTF-16-ish approx via length). */
+/** Persist clean buffer content up to this size (chars). */
 export const SESSION_CONTENT_MAX_CHARS = 2 * 1024 * 1024
+/** Dirty / orphan / untitled buffers may persist up to the large-file default (chars ≈ bytes for ASCII). */
+export const SESSION_DIRTY_CONTENT_MAX_CHARS = 100 * 1024 * 1024
 
 export interface SessionTab {
   path: string
@@ -13,6 +15,7 @@ export interface SessionTab {
   size: number
   dirty: boolean
   untitled?: boolean
+  orphan?: boolean
   languageHint?: string
   /** Present for untitled / dirty / small text buffers. */
   content?: string
@@ -80,13 +83,19 @@ export function tabToSession(tab: OpenTab): SessionTab {
     size: tab.size,
     dirty: tab.dirty,
     untitled: tab.untitled,
+    orphan: tab.orphan,
     languageHint: tab.languageHint,
   }
   const needContent =
     tab.untitled
+    || tab.orphan
     || tab.dirty
     || ((tab.kind === 'text' || tab.kind === 'markdown') && !tab.largeMode)
-  if (needContent && tab.content.length <= SESSION_CONTENT_MAX_CHARS) {
+  const maxChars =
+    tab.untitled || tab.orphan || tab.dirty
+      ? SESSION_DIRTY_CONTENT_MAX_CHARS
+      : SESSION_CONTENT_MAX_CHARS
+  if (needContent && tab.content.length <= maxChars) {
     base.content = tab.content
   }
   return base

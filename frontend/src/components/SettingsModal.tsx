@@ -13,8 +13,15 @@ import {
   MIN_AUTO_SAVE_INTERVAL_SECONDS,
   clampAutoSaveIntervalSeconds,
 } from '../settings/autoSavePreferences'
+import {
+  DEFAULT_LARGE_FILE_THRESHOLD_MB,
+  MIN_LARGE_FILE_THRESHOLD_MB,
+  clampLargeFileThresholdMB,
+  normalizeEditorPrefs,
+  type EditorPrefs,
+} from '../settings/editorPreferences'
 import type { useAppUpdateManager } from '../hooks/useAppUpdateManager'
-import { GetGlobalProxyConfig, GetOpenPlacementPrefs, GetShellIntegrationPrefs, SaveGlobalProxy, SaveOpenPlacementPrefs, SaveShellIntegrationPrefs } from '../../wailsjs/go/app/App'
+import { GetEditorPrefs, GetGlobalProxyConfig, GetOpenPlacementPrefs, GetShellIntegrationPrefs, SaveEditorPrefs, SaveGlobalProxy, SaveOpenPlacementPrefs, SaveShellIntegrationPrefs } from '../../wailsjs/go/app/App'
 import {
   DEFAULT_OPEN_PLACEMENT,
   normalizeOpenPlacement,
@@ -117,6 +124,9 @@ export function SettingsModal({ update }: Props) {
   const [shellContextMenu, setShellContextMenu] = useState(true)
   const [shellStatus, setShellStatus] = useState('')
   const [shellBusy, setShellBusy] = useState(false)
+  const [editorPrefs, setEditorPrefs] = useState<EditorPrefs>(() => normalizeEditorPrefs(null))
+  const [largeFileDraft, setLargeFileDraft] = useState(String(DEFAULT_LARGE_FILE_THRESHOLD_MB))
+  const [editorPrefsStatus, setEditorPrefsStatus] = useState('')
 
   useEffect(() => {
     if (!settingsOpen) setCapturing(null)
@@ -126,8 +136,9 @@ export function SettingsModal({ update }: Props) {
     if (settingsOpen) {
       setRecentDraft(String(recentMax))
       setAutoSaveIntervalDraft(String(autoSave.intervalSeconds))
+      setLargeFileDraft(String(editorPrefs.largeFileThresholdMB))
     }
-  }, [settingsOpen, recentMax, autoSave.intervalSeconds])
+  }, [settingsOpen, recentMax, autoSave.intervalSeconds, editorPrefs.largeFileThresholdMB])
 
   useEffect(() => {
     if (settingsOpen && settingsSection === 'about') {
@@ -149,9 +160,19 @@ export function SettingsModal({ update }: Props) {
         if (!cancelled) setOpenPlacementStatus(String(e))
       }
       try {
-        const shell = await GetShellIntegrationPrefs()
+        const prefs = normalizeEditorPrefs(await GetEditorPrefs())
         if (!cancelled) {
-          setShellContextMenu(shell?.contextMenu !== false)
+          setEditorPrefs(prefs)
+          setLargeFileDraft(String(prefs.largeFileThresholdMB))
+          setEditorPrefsStatus('')
+        }
+      } catch (e) {
+        if (!cancelled) setEditorPrefsStatus(String(e))
+      }
+      try {
+        const prefs = await GetShellIntegrationPrefs()
+        if (!cancelled) {
+          setShellContextMenu(Boolean(prefs?.contextMenu ?? true))
           setShellStatus('')
         }
       } catch (e) {
@@ -262,6 +283,27 @@ export function SettingsModal({ update }: Props) {
     const clamped = clampAutoSaveIntervalSeconds(n)
     setAutoSaveIntervalSeconds(clamped)
     setAutoSaveIntervalDraft(String(clamped))
+  }
+
+  const applyLargeFileThreshold = async () => {
+    const n = Math.floor(Number(largeFileDraft))
+    if (!Number.isFinite(n)) {
+      setLargeFileDraft(String(editorPrefs.largeFileThresholdMB))
+      return
+    }
+    const next = normalizeEditorPrefs({ largeFileThresholdMB: clampLargeFileThresholdMB(n) })
+    if (n < MIN_LARGE_FILE_THRESHOLD_MB) {
+      setLargeFileDraft(String(next.largeFileThresholdMB))
+    }
+    setEditorPrefsStatus('')
+    try {
+      const saved = normalizeEditorPrefs(await SaveEditorPrefs(next))
+      setEditorPrefs(saved)
+      setLargeFileDraft(String(saved.largeFileThresholdMB))
+    } catch (e) {
+      setEditorPrefsStatus(String(e))
+      setLargeFileDraft(String(editorPrefs.largeFileThresholdMB))
+    }
   }
 
   const saveProxy = async () => {
@@ -424,8 +466,8 @@ export function SettingsModal({ update }: Props) {
                       <span>
                         Auto-save
                         <span className="settings-row-sub">
-                          Write dirty files to disk on an interval (untitled files still need Save As).
-                          Default on.
+                          Write dirty files to disk on an interval (untitled and missing-on-disk
+                          buffers still need Save / Save As). Default on.
                         </span>
                       </span>
                     </label>
@@ -456,6 +498,39 @@ export function SettingsModal({ update }: Props) {
                       aria-label="Auto-save interval in seconds"
                     />
                   </div>
+                  <div className="settings-row">
+                    <span className="settings-row-label">
+                      Large file threshold
+                      <span className="settings-row-sub">
+                        Text / Markdown larger than this (MB) open in paged mode: content loads in
+                        chunks while scrolling, Format JSON is disabled, and a missing source file
+                        only shows a notice (no Keep-in-editor prompt). Files stay editable; Save
+                        still writes the full document. Minimum {MIN_LARGE_FILE_THRESHOLD_MB}MB
+                        (default {DEFAULT_LARGE_FILE_THRESHOLD_MB}). No upper limit — very large
+                        values use more memory. Applies to newly opened files.
+                      </span>
+                    </span>
+                    <input
+                      className="settings-number"
+                      type="number"
+                      min={MIN_LARGE_FILE_THRESHOLD_MB}
+                      value={largeFileDraft}
+                      onChange={(e) => setLargeFileDraft(e.target.value.replace(/[^\d]/g, ''))}
+                      onBlur={() => void applyLargeFileThreshold()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void applyLargeFileThreshold()
+                        }
+                      }}
+                      aria-label="Large file threshold in megabytes"
+                    />
+                  </div>
+                  {editorPrefsStatus ? (
+                    <div className="settings-hint" style={{ color: 'var(--ph-danger)' }}>
+                      {editorPrefsStatus}
+                    </div>
+                  ) : null}
                   <div className="settings-row settings-row-stack">
                     <label className="settings-check">
                       <input

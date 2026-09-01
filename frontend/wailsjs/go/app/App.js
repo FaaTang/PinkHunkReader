@@ -30,8 +30,16 @@ export function DownloadUpdate() {
   return window['go']['app']['App']['DownloadUpdate']();
 }
 
+export function FileExists(arg1) {
+  return window['go']['app']['App']['FileExists'](arg1);
+}
+
 export function GetAppInfo() {
   return window['go']['app']['App']['GetAppInfo']();
+}
+
+export function GetEditorPrefs() {
+  return window['go']['app']['App']['GetEditorPrefs']();
 }
 
 export function GetGlobalProxyConfig() {
@@ -136,6 +144,10 @@ export function RemoveRoot(arg1) {
 
 export function RevealInFileManager(arg1) {
   return window['go']['app']['App']['RevealInFileManager'](arg1);
+}
+
+export function SaveEditorPrefs(arg1) {
+  return window['go']['app']['App']['SaveEditorPrefs'](arg1);
 }
 
 export function SaveGlobalProxy(arg1) {

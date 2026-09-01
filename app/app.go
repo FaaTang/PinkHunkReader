@@ -282,7 +282,7 @@ func (a *App) StatFile(path string) (define.FileInfo, error) {
 	if a.guard == nil {
 		return define.FileInfo{}, errNoRoot()
 	}
-	return fsx.Stat(a.guard, path)
+	return fsx.Stat(a.guard, path, a.largeFileBytes())
 }
 
 // DetectKind returns the viewer kind for a path.
@@ -290,12 +290,29 @@ func (a *App) DetectKind(path string) string {
 	return define.DetectKind(path)
 }
 
+// FileExists reports whether a path exists on disk (no workspace root required).
+// Returns (false, nil) when the path is missing; other Stat errors are returned as err.
+func (a *App) FileExists(path string) (bool, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false, fmt.Errorf("path is empty")
+	}
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 // ReadText loads a whole text file (small / non-largeMode).
 func (a *App) ReadText(path string) (string, error) {
 	if a.guard == nil {
 		return "", errNoRoot()
 	}
-	return fsx.ReadText(a.guard, path)
+	return fsx.ReadText(a.guard, path, a.largeFileBytes())
 }
 
 // WriteText saves UTF-8 text content.

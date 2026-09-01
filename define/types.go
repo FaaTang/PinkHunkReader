@@ -12,11 +12,30 @@ const (
 	KindDirectory = "directory"
 )
 
-// LargeFileBytes: files larger than this enter large-file (slice) mode for text kinds.
-const LargeFileBytes int64 = 2 * 1024 * 1024
+// Large-file threshold (MB) for Settings → General. Files larger than this
+// enter paged (ReadSlice) mode for editable text / Markdown.
+const (
+	DefaultLargeFileThresholdMB = 100
+	MinLargeFileThresholdMB     = 1
+)
+
+// DefaultLargeFileBytes is the default byte threshold (100MB).
+const DefaultLargeFileBytes int64 = DefaultLargeFileThresholdMB * 1024 * 1024
+
+// LargeFileBytes is kept as an alias of the default for older call sites/tests.
+const LargeFileBytes = DefaultLargeFileBytes
 
 // DefaultSliceLines is the default window size for ReadSlice.
 const DefaultSliceLines = 200
+
+// LargeFileThresholdBytes converts a megabyte setting to bytes.
+// Values below MinLargeFileThresholdMB fall back to the default.
+func LargeFileThresholdBytes(mb int) int64 {
+	if mb < MinLargeFileThresholdMB {
+		mb = DefaultLargeFileThresholdMB
+	}
+	return int64(mb) * 1024 * 1024
+}
 
 // DirEntry is one node in the file tree.
 type DirEntry struct {

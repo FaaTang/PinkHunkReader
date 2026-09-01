@@ -81,7 +81,8 @@ func stringsLessFold(a, b string) bool {
 }
 
 // Stat returns file metadata for the viewer host.
-func Stat(g *Guard, path string) (define.FileInfo, error) {
+// largeFileBytes controls when editable text enters paged mode (≤0 uses default).
+func Stat(g *Guard, path string, largeFileBytes int64) (define.FileInfo, error) {
 	abs, err := g.Resolve(path)
 	if err != nil {
 		return define.FileInfo{}, err
@@ -94,8 +95,11 @@ func Stat(g *Guard, path string) (define.FileInfo, error) {
 	if !info.IsDir() {
 		kind = define.DetectKind(abs)
 	}
+	if largeFileBytes <= 0 {
+		largeFileBytes = define.DefaultLargeFileBytes
+	}
 	size := info.Size()
-	large := !info.IsDir() && define.IsEditable(kind) && size > define.LargeFileBytes
+	large := !info.IsDir() && define.IsEditable(kind) && size > largeFileBytes
 	return define.FileInfo{
 		Path:      abs,
 		Name:      info.Name(),

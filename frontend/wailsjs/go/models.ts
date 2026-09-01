@@ -45,6 +45,18 @@ export namespace define {
 	        this.kind = source["kind"];
 	    }
 	}
+	export class EditorPrefs {
+	    largeFileThresholdMB: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new EditorPrefs(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.largeFileThresholdMB = source["largeFileThresholdMB"];
+	    }
+	}
 	export class FileInfo {
 	    path: string;
 	    name: string;
@@ -196,6 +208,7 @@ export namespace define {
 	    size: number;
 	    dirty: boolean;
 	    untitled: boolean;
+	    orphan?: boolean;
 	    languageHint?: string;
 	    content?: string;
 	
@@ -213,6 +226,7 @@ export namespace define {
 	        this.size = source["size"];
 	        this.dirty = source["dirty"];
 	        this.untitled = source["untitled"];
+	        this.orphan = source["orphan"];
 	        this.languageHint = source["languageHint"];
 	        this.content = source["content"];
 	    }

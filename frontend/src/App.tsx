@@ -3,6 +3,7 @@ import './App.css'
 import './styles/theme.css'
 import logo from './assets/logo.svg'
 import { CloseSaveDialog, type CloseSaveChoice } from './components/CloseSaveDialog'
+import { KeepMissingDialog, type KeepMissingChoice } from './components/KeepMissingDialog'
 import { FileTree } from './components/FileTree'
 import { GoToDialog } from './components/GoToDialog'
 import { OpenMenu } from './components/OpenMenu'
@@ -48,6 +49,7 @@ import {
 import {
   AddRoot,
   ConfirmQuit,
+  FileExists,
   GetLaunchInfo,
   GetOpenPlacementPrefs,
   GetRoots,
@@ -78,6 +80,11 @@ import {
   WindowShow,
   WindowUnminimise,
 } from '../wailsjs/runtime/runtime'
+
+function canKeepMissingTab(tab: OpenTab): boolean {
+  if (!tab.editable || tab.largeMode || tab.untitled) return false
+  return tab.kind === 'text' || tab.kind === 'markdown'
+}
 
 function pathUnderAnyRoot(filePath: string, roots: string[]): boolean {
   return roots.some((r) => pathUnderRoot(filePath, r))
@@ -234,6 +241,10 @@ function AppShell() {
     pathLabel: string
     defaultTarget: OpenParentFolderChoice
   } | null>(null)
+  const [missingPrompt, setMissingPrompt] = useState<{
+    path: string
+    canKeep: boolean
+  } | null>(null)
 
   /** Per-tab paged save hooks (tabs stay mounted while hidden). */
   const pagedSaveByPathRef = useRef(new Map<string, () => Promise<void>>())
@@ -246,6 +257,9 @@ function AppShell() {
   const closeResolverRef = useRef<((c: CloseSaveChoice) => void) | null>(null)
   const placementResolverRef = useRef<((c: OpenPlacementChoice | 'cancel') => void) | null>(null)
   const parentFolderResolverRef = useRef<((c: OpenParentFolderChoice | 'cancel') => void) | null>(null)
+  const missingResolverRef = useRef<((c: KeepMissingChoice) => void) | null>(null)
+  const missingPromptedRef = useRef(new Set<string>())
+  const missingCheckBusyRef = useRef(false)
   const openKnownPathsRef = useRef<(paths: string[]) => Promise<void>>(async () => {})
   const quittingRef = useRef(false)
   const savePhaseRef = useRef<'idle' | 'manual' | 'auto'>('idle')
@@ -334,6 +348,7 @@ function AppShell() {
         size: t.size,
         dirty: t.dirty,
         untitled: Boolean(t.untitled),
+        orphan: Boolean(t.orphan),
         languageHint: t.languageHint ?? '',
         content: t.content ?? '',
       })),
@@ -376,6 +391,13 @@ function AppShell() {
     return new Promise<OpenParentFolderChoice | 'cancel'>((resolve) => {
       parentFolderResolverRef.current = resolve
       setParentFolderPrompt({ pathLabel, defaultTarget })
+    })
+  }, [])
+
+  const askKeepMissing = useCallback((path: string, canKeep: boolean) => {
+    return new Promise<KeepMissingChoice>((resolve) => {
+      missingResolverRef.current = resolve
+      setMissingPrompt({ path, canKeep })
     })
   }, [])
 
@@ -478,6 +500,16 @@ function AppShell() {
         continue
       }
       if (typeof st.content === 'string') {
+        let orphan = Boolean(st.orphan)
+        if (!orphan && st.path) {
+          try {
+            const exists = await FileExists(st.path)
+            if (!exists) orphan = true
+          } catch {
+            /* permission / other — keep non-orphan */
+          }
+        }
+        if (orphan) missingPromptedRef.current.add(st.path)
         restored.push({
           path: st.path,
           name: st.name,
@@ -486,7 +518,8 @@ function AppShell() {
           largeMode: false,
           size: st.size,
           content: st.content,
-          dirty: st.dirty,
+          dirty: Boolean(st.dirty || orphan),
+          orphan: orphan || undefined,
           languageHint: st.languageHint,
         })
         continue
@@ -819,6 +852,7 @@ function AppShell() {
   ): Promise<boolean> => {
     if (!tab.editable) return true
     const reason = opts?.reason ?? 'manual'
+    if (reason === 'auto' && (tab.untitled || tab.orphan)) return false
     const managePhase = opts?.managePhase !== false
     if (managePhase) setSavePhase(reason)
     setError('')
@@ -861,8 +895,9 @@ function AppShell() {
         await WriteText(tab.path, tab.content)
       }
       setTabs((prev) =>
-        prev.map((t) => (t.path === tab.path ? { ...t, dirty: false } : t)),
+        prev.map((t) => (t.path === tab.path ? { ...t, dirty: false, orphan: false } : t)),
       )
+      missingPromptedRef.current.delete(tab.path)
       setStatus(reason === 'auto' ? `Auto-saved ${tab.name}` : `Saved ${tab.name}`)
       return true
     } catch (e) {
@@ -882,11 +917,16 @@ function AppShell() {
   const runAutoSave = useCallback(async () => {
     if (!autoSave.enabled || quittingRef.current) return
     if (savePhaseRef.current !== 'idle' || autoSaveBusyRef.current) return
-    if (closeResolverRef.current || placementResolverRef.current || parentFolderResolverRef.current) {
+    if (
+      closeResolverRef.current
+      || placementResolverRef.current
+      || parentFolderResolverRef.current
+      || missingResolverRef.current
+    ) {
       return
     }
     const candidates = tabsRef.current.filter((t) => {
-      if (!t.editable || !t.dirty || t.untitled) return false
+      if (!t.editable || !t.dirty || t.untitled || t.orphan) return false
       return true
     })
     if (!candidates.length) return
@@ -897,7 +937,7 @@ function AppShell() {
       let lastName = ''
       for (const candidate of candidates) {
         const latest = tabsRef.current.find((t) => t.path === candidate.path)
-        if (!latest?.dirty || latest.untitled || !latest.editable) continue
+        if (!latest?.dirty || latest.untitled || latest.orphan || !latest.editable) continue
         const ok = await saveTab(latest, { reason: 'auto', managePhase: false })
         if (!ok) break
         saved += 1
@@ -932,6 +972,73 @@ function AppShell() {
       return next
     })
   }, [])
+
+  const checkMissingSources = useCallback(async () => {
+    if (missingCheckBusyRef.current || quittingRef.current) return
+    if (
+      closeResolverRef.current
+      || placementResolverRef.current
+      || parentFolderResolverRef.current
+      || missingResolverRef.current
+    ) {
+      return
+    }
+    missingCheckBusyRef.current = true
+    try {
+      const snapshot = [...tabsRef.current]
+      for (const tab of snapshot) {
+        if (tab.untitled) continue
+        if (!tabsRef.current.some((t) => t.path === tab.path)) continue
+        let exists = true
+        try {
+          exists = await FileExists(tab.path)
+        } catch {
+          // Permission / transient errors — do not treat as missing.
+          continue
+        }
+        if (exists) {
+          missingPromptedRef.current.delete(tab.path)
+          if (tab.orphan) {
+            setTabs((prev) =>
+              prev.map((t) => (t.path === tab.path ? { ...t, orphan: false } : t)),
+            )
+          }
+          continue
+        }
+        if (missingPromptedRef.current.has(tab.path)) continue
+        missingPromptedRef.current.add(tab.path)
+        const canKeep = canKeepMissingTab(tab)
+        const choice = await askKeepMissing(tab.path, canKeep)
+        if (choice === 'keep' && canKeep) {
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.path === tab.path ? { ...t, orphan: true, dirty: true } : t,
+            ),
+          )
+          setStatus(`Kept ${tab.name} (missing on disk)`)
+        } else {
+          removeTab(tab.path)
+          setStatus(`Closed ${tab.name} (source missing)`)
+        }
+      }
+    } finally {
+      missingCheckBusyRef.current = false
+    }
+  }, [askKeepMissing, removeTab])
+
+  useEffect(() => {
+    if (!sessionReady) return
+    const onFocus = () => {
+      void checkMissingSources()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [sessionReady, checkMissingSources])
+
+  useEffect(() => {
+    if (!sessionReady || !activePath) return
+    void checkMissingSources()
+  }, [sessionReady, activePath, checkMissingSources])
 
   const closeTab = useCallback(async (path: string) => {
     const tab = tabsRef.current.find((t) => t.path === path)
@@ -1168,12 +1275,23 @@ function AppShell() {
       setStatus('Explorer refreshed')
       return
     }
+    if (tab.orphan) {
+      setStatus('Explorer refreshed')
+      void checkMissingSources()
+      return
+    }
     if (tab.dirty) {
       const choice = await askCloseSave(tab, 0)
       const result = await applyCloseSaveChoice(choice, [tab], 0, saveTab)
       if (result === 'abort') return
     }
     try {
+      const exists = await FileExists(activePath)
+      if (!exists) {
+        void checkMissingSources()
+        setStatus('Explorer refreshed')
+        return
+      }
       setTabs((prev) => prev.filter((t) => t.path !== activePath))
       setActivePath(null)
       await openFile(activePath)
@@ -1182,7 +1300,7 @@ function AppShell() {
       setError(String(e))
       setStatus('Explorer refreshed')
     }
-  }, [activePath, askCloseSave, openFile, saveTab, tabs])
+  }, [activePath, askCloseSave, checkMissingSources, openFile, saveTab, tabs])
 
   const handleClosePrompt = useCallback((choice: CloseSaveChoice) => {
     const resolve = closeResolverRef.current
@@ -1227,6 +1345,13 @@ function AppShell() {
     parentFolderResolverRef.current = null
     setParentFolderPrompt(null)
     resolve?.('cancel')
+  }, [])
+
+  const handleMissingChoice = useCallback((choice: KeepMissingChoice) => {
+    const resolve = missingResolverRef.current
+    missingResolverRef.current = null
+    setMissingPrompt(null)
+    resolve?.(choice)
   }, [])
 
   const handleQuitRequested = useCallback(async () => {
@@ -1613,6 +1738,7 @@ function AppShell() {
         <span>{status}</span>
         {activeTab?.dirty ? <span style={{ color: 'var(--ph-accent)' }}>Unsaved</span> : null}
         {activeTab?.untitled ? <span>Untitled</span> : null}
+        {activeTab?.orphan ? <span style={{ color: 'var(--ph-accent)' }}>Missing on disk</span> : null}
         {activeTab?.largeMode ? <span>Paged</span> : null}
       </footer>
 
@@ -1632,6 +1758,12 @@ function AppShell() {
         fileName={closePrompt?.name ?? ''}
         remaining={closePrompt?.remaining ?? 0}
         onChoice={handleClosePrompt}
+      />
+      <KeepMissingDialog
+        open={Boolean(missingPrompt)}
+        filePath={missingPrompt?.path ?? ''}
+        canKeep={missingPrompt?.canKeep ?? false}
+        onChoice={handleMissingChoice}
       />
       <OpenPlacementDialog
         open={Boolean(placementPrompt)}
