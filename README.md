@@ -61,6 +61,8 @@ cd ..
 wails dev
 ```
 
+`wailsdev` / non-production builds store sessions and prefs under a separate folder (`PinkHunkReader-dev`) so they do not overwrite the release app’s cache. They also do not rewrite the OS “Open with PinkHunkReader” verb.
+
 Build:
 
 ```bash

@@ -60,6 +60,8 @@ cd ..
 wails dev
 ```
 
+`wailsdev` / 非 production 构建会把会话与偏好写到独立目录（`PinkHunkReader-dev`），避免覆盖正式版缓存；也不会改写系统「用 PinkHunkReader 打开」菜单。
+
 打包：
 
 ```bash

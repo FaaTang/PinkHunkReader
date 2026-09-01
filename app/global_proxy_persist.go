@@ -11,16 +11,23 @@ import (
 
 const globalProxyFileName = "global_proxy.json"
 
+// ConfigDirLeaf returns the app config folder name under the OS user config dir
+// (production: PinkHunkReader; wailsdev / non-production: PinkHunkReader-dev).
+func ConfigDirLeaf() string {
+	return appConfigDirLeaf()
+}
+
 func resolveAppConfigDir() string {
+	leaf := appConfigDirLeaf()
 	dir, err := os.UserConfigDir()
 	if err != nil || strings.TrimSpace(dir) == "" {
 		home, homeErr := os.UserHomeDir()
 		if homeErr != nil || strings.TrimSpace(home) == "" {
-			return "PinkHunkReader"
+			return leaf
 		}
-		return filepath.Join(home, ".config", "PinkHunkReader")
+		return filepath.Join(home, ".config", leaf)
 	}
-	return filepath.Join(dir, "PinkHunkReader")
+	return filepath.Join(dir, leaf)
 }
 
 func globalProxyMetadataPath(configDir string) string {

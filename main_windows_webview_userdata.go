@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/FaaTang/PinkHunkReader/app"
 )
 
 const webviewUserDataDirName = "WebView2"
@@ -18,7 +20,7 @@ func resolveWindowsWebviewUserDataPath() string {
 		return ""
 	}
 
-	targetDir := filepath.Join(appDataDir, "PinkHunkReader", webviewUserDataDirName)
+	targetDir := filepath.Join(appDataDir, app.ConfigDirLeaf(), webviewUserDataDirName)
 	_ = migrateLegacyWindowsWebviewUserData(appDataDir, targetDir)
 	cleanupLegacyWindowsWebviewUserData(appDataDir, targetDir)
 	return targetDir
@@ -86,8 +88,14 @@ func listLegacyWindowsWebviewUserDataDirs(appDataDir, targetDir string) []string
 		if src == "" || strings.EqualFold(src, targetDir) {
 			return
 		}
-		// Never touch the shared app config root (sessions / prefs live here).
+		// Never touch shared app config roots (sessions / prefs live here).
 		if strings.EqualFold(src, filepath.Join(appDataDir, "PinkHunkReader")) {
+			return
+		}
+		if strings.EqualFold(src, filepath.Join(appDataDir, "PinkHunkReader-dev")) {
+			return
+		}
+		if strings.EqualFold(src, filepath.Join(appDataDir, app.ConfigDirLeaf())) {
 			return
 		}
 		key := strings.ToLower(src)

@@ -63,6 +63,9 @@ func normalizeShellPrefs(p define.ShellIntegrationPrefs) define.ShellIntegration
 }
 
 func (a *App) applyShellIntegration(enabled bool) error {
+	if !shellOSIntegrationEnabled() {
+		return nil
+	}
 	exe, err := resolveExecutablePath()
 	if err != nil {
 		return err
@@ -74,6 +77,9 @@ func (a *App) applyShellIntegration(enabled bool) error {
 }
 
 func (a *App) syncShellIntegrationOnStartup() {
+	if !shellOSIntegrationEnabled() {
+		return
+	}
 	prefs, err := a.GetShellIntegrationPrefs()
 	if err != nil {
 		return
