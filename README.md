@@ -24,7 +24,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 - **Markdown**: side-by-side edit + live preview (GFM)
 - **Text / code**: Monaco editor with basic language highlighting; JSON format/minify via `Ctrl+Shift+M` / `Cmd+Shift+M`
 - **PDF**: page-by-page preview (PDF.js)
-- **Excel**: read-only `.xlsx` / `.xls` grid preview (column resize, cell tooltips)
+- **Excel**: read-only `.xlsx` / `.xls` grid preview (column resize, double-click header to autofit, click cell to copy)
 - **Images**: PNG / JPG / GIF / WebP / SVG and more
 - **Large files**: text / Markdown above a configurable threshold (Settings → General, default **100MB**, minimum 1MB, no upper cap) stream into the Monaco model chunk by chunk (Monaco's own virtualized rendering keeps it smooth), prefetching the next window near the bottom edge. Paging only affects loading — files stay **editable and saveable**; saving auto-drains any not-yet-loaded tail before write. Changing the threshold applies to newly opened files.
 - **Missing source**: if an open file is deleted or renamed on disk, editable text/Markdown (non-paged) asks whether to keep the buffer in the editor (Save recreates the file); paged/binary tabs only notify that the source is gone. Orphan tabs skip auto-save until you Save manually.

@@ -7,9 +7,6 @@ import { ViewerLoading } from '../components/ViewerLoading'
 import { toUint8Array } from '../util/bytes'
 import './viewers.css'
 
-/** Overlap tip into the cell so the pointer can reach Copy without crossing a gap / next row. */
-const CELL_TIP_OVERLAP_PX = 10
-
 interface Props {
   path: string
   name: string
@@ -20,7 +17,7 @@ type SheetGrid = {
   rows: string[][]
 }
 
-type CellHoverTip = {
+type CellTip = {
   text: string
   row: number
   col: number
@@ -56,11 +53,9 @@ export function ExcelView({ path, name }: Props) {
     pointerId: number
   } | null>(null)
   const cellTipRef = useRef<HTMLDivElement | null>(null)
-  const cellTipPinnedRef = useRef(false)
-  const cellTipHideTimerRef = useRef<number | null>(null)
   const cellTipPosRef = useRef({ x: 0, y: 0, top: 0 })
   const cellTipKeyRef = useRef('')
-  const [cellTip, setCellTip] = useState<CellHoverTip | null>(null)
+  const [cellTip, setCellTip] = useState<CellTip | null>(null)
   const [cellTipCopied, setCellTipCopied] = useState(false)
 
   useEffect(() => {
@@ -185,9 +180,7 @@ export function ExcelView({ path, name }: Props) {
     commitWidths(widthsLiveRef.current)
   }
 
-  const onResizeDoubleClick = (col: number, e: React.MouseEvent<HTMLSpanElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const autofitColumn = (col: number) => {
     dragRef.current = null
     if (!current) return
     const fitted = estimateColWidth(current.rows, col, COL_AUTOFIT_MAX_PX)
@@ -197,30 +190,19 @@ export function ExcelView({ path, name }: Props) {
     commitWidths(next)
   }
 
-  const clearCellTipHideTimer = () => {
-    if (cellTipHideTimerRef.current != null) {
-      window.clearTimeout(cellTipHideTimerRef.current)
-      cellTipHideTimerRef.current = null
-    }
+  const onColAutofitDoubleClick = (col: number, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    autofitColumn(col)
   }
 
   const hideCellTip = () => {
-    clearCellTipHideTimer()
-    cellTipPinnedRef.current = false
     cellTipKeyRef.current = ''
     setCellTip(null)
     setCellTipCopied(false)
   }
 
-  const scheduleHideCellTip = () => {
-    clearCellTipHideTimer()
-    cellTipHideTimerRef.current = window.setTimeout(() => {
-      if (cellTipPinnedRef.current) return
-      hideCellTip()
-    }, 280)
-  }
-
-  /** Place tip overlapping the cell edge — no gap — so Copy stays reachable. */
+  /** Place tip below the cell; flip above if it would leave the viewport. */
   const placeCellTip = (anchorLeft: number, cellTop: number, cellBottom: number) => {
     const el = cellTipRef.current
     if (!el) return
@@ -229,10 +211,9 @@ export function ExcelView({ path, name }: Props) {
     const maxX = window.innerWidth - tipW - 8
     const maxY = window.innerHeight - tipH - 8
     let x = anchorLeft
-    // Prefer below, overlapping into the cell; flip above if it would leave the viewport.
-    let y = cellBottom - CELL_TIP_OVERLAP_PX
+    let y = cellBottom + 4
     if (y + tipH > window.innerHeight - 8) {
-      y = cellTop - tipH + CELL_TIP_OVERLAP_PX
+      y = cellTop - tipH - 4
     }
     if (x + tipW > window.innerWidth - 8) {
       x = maxX
@@ -244,10 +225,7 @@ export function ExcelView({ path, name }: Props) {
   }
 
   const showCellTip = (row: number, col: number, text: string, td: HTMLElement) => {
-    clearCellTipHideTimer()
     const key = `${row}:${col}`
-    // Same cell: keep tip still so the pointer can reach Copy without the panel fleeing.
-    if (cellTipKeyRef.current === key) return
     const rect = td.getBoundingClientRect()
     cellTipPosRef.current = { x: rect.left, y: rect.bottom, top: rect.top }
     cellTipKeyRef.current = key
@@ -261,56 +239,32 @@ export function ExcelView({ path, name }: Props) {
     placeCellTip(pos.x, pos.top, pos.y)
   }, [cellTip])
 
-  const pointerOverCellTip = (clientX: number, clientY: number) => {
-    const tip = cellTipRef.current
-    if (!tip) return false
-    const r = tip.getBoundingClientRect()
-    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom
-  }
-
-  const onSheetPointerMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const onSheetClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (dragRef.current) return
-    // Tip is portaled outside the sheet; if it overlays the table, treat that as pinned hover.
-    if (pointerOverCellTip(e.clientX, e.clientY)) {
-      cellTipPinnedRef.current = true
-      clearCellTipHideTimer()
-      return
-    }
-    if (cellTipPinnedRef.current) return
+    // Ignore clicks that land on the portaled tip (shouldn't normally hit this handler).
+    if (cellTipRef.current?.contains(e.target as Node)) return
     const td = (e.target as HTMLElement | null)?.closest?.('td')
     if (!td || !tableRef.current?.contains(td)) {
-      scheduleHideCellTip()
+      hideCellTip()
       return
     }
     const row = Number(td.getAttribute('data-r'))
     const col = Number(td.getAttribute('data-c'))
     if (!Number.isFinite(row) || !Number.isFinite(col) || !current) {
-      scheduleHideCellTip()
+      hideCellTip()
       return
     }
     const text = current.rows[row]?.[col] ?? ''
     if (!text) {
-      scheduleHideCellTip()
+      hideCellTip()
+      return
+    }
+    const key = `${row}:${col}`
+    if (cellTipKeyRef.current === key) {
+      hideCellTip()
       return
     }
     showCellTip(row, col, text, td)
-  }
-
-  const onSheetPointerLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (cellTipPinnedRef.current) return
-    const related = e.relatedTarget as Node | null
-    if (related && cellTipRef.current?.contains(related)) {
-      cellTipPinnedRef.current = true
-      clearCellTipHideTimer()
-      return
-    }
-    // Leaving into the tip overlay (relatedTarget may be null across portal / WebView).
-    if (pointerOverCellTip(e.clientX, e.clientY)) {
-      cellTipPinnedRef.current = true
-      clearCellTipHideTimer()
-      return
-    }
-    scheduleHideCellTip()
   }
 
   const onSheetScroll = () => {
@@ -327,16 +281,29 @@ export function ExcelView({ path, name }: Props) {
   }
 
   useEffect(() => {
-    return () => clearCellTipHideTimer()
-  }, [])
-
-  useEffect(() => {
-    clearCellTipHideTimer()
-    cellTipPinnedRef.current = false
     cellTipKeyRef.current = ''
     setCellTip(null)
     setCellTipCopied(false)
   }, [active, path])
+
+  useEffect(() => {
+    if (!cellTip) return
+    const onDocPointerDown = (e: PointerEvent) => {
+      const t = e.target as Node
+      if (cellTipRef.current?.contains(t)) return
+      if (tableRef.current?.contains(t)) return
+      hideCellTip()
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') hideCellTip()
+    }
+    document.addEventListener('pointerdown', onDocPointerDown, true)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [cellTip])
 
   if (error) {
     return <div className="empty" style={{ color: 'var(--ph-danger)' }}>{error}</div>
@@ -366,12 +333,7 @@ export function ExcelView({ path, name }: Props) {
       <div className="office-body media-wrap-loading-host">
         <ViewerLoading visible={loading} label="Loading Excel…" detail={name} />
         {!loading && current ? (
-          <div
-            className="office-sheet-wrap"
-            onMouseMove={onSheetPointerMove}
-            onMouseLeave={onSheetPointerLeave}
-            onScroll={onSheetScroll}
-          >
+          <div className="office-sheet-wrap" onClick={onSheetClick} onScroll={onSheetScroll}>
             {current.rows.length === 0 ? (
               <div className="empty">Empty sheet</div>
             ) : (
@@ -392,16 +354,22 @@ export function ExcelView({ path, name }: Props) {
                   <tr>
                     <th className="office-corner" aria-hidden="true" />
                     {Array.from({ length: colCount }, (_, ci) => (
-                      <th key={ci} className="office-col-letter" scope="col">
+                      <th
+                        key={ci}
+                        className="office-col-letter"
+                        scope="col"
+                        title="Double-click to autofit"
+                        onDoubleClick={(e) => onColAutofitDoubleClick(ci, e)}
+                      >
                         {colLetter(ci)}
                         <span
                           className="office-col-resize"
-                          title="Drag to resize · double-click to fit"
+                          title="Drag to resize · double-click to autofit"
                           onPointerDown={(e) => onResizePointerDown(ci, e)}
                           onPointerMove={onResizePointerMove}
                           onPointerUp={onResizePointerUp}
                           onPointerCancel={onResizePointerUp}
-                          onDoubleClick={(e) => onResizeDoubleClick(ci, e)}
+                          onDoubleClick={(e) => onColAutofitDoubleClick(ci, e)}
                         />
                       </th>
                     ))}
@@ -432,15 +400,9 @@ export function ExcelView({ path, name }: Props) {
             <div
               ref={cellTipRef}
               className="office-cell-tip"
-              role="tooltip"
-              onMouseEnter={() => {
-                cellTipPinnedRef.current = true
-                clearCellTipHideTimer()
-              }}
-              onMouseLeave={() => {
-                cellTipPinnedRef.current = false
-                scheduleHideCellTip()
-              }}
+              role="dialog"
+              aria-label="Cell value"
+              onClick={(e) => e.stopPropagation()}
             >
               <pre className="office-cell-tip-text">{cellTip.text}</pre>
               <button
@@ -451,12 +413,6 @@ export function ExcelView({ path, name }: Props) {
                   e.preventDefault()
                   e.stopPropagation()
                   void onCopyCellTip()
-                }}
-                onPointerDown={(e) => {
-                  // Keep tip pinned through the click; sheet leave must not race-hide it.
-                  e.stopPropagation()
-                  cellTipPinnedRef.current = true
-                  clearCellTipHideTimer()
                 }}
               >
                 {cellTipCopied ? 'Copied' : 'Copy'}
