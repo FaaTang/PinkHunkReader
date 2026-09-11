@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DetectKind, InspectPath, ListDir } from '../../wailsjs/go/app/App'
 import type { DirEntry } from '../types'
 import { folderLabel, parentDir, pathUnderRoot, pathsEqual } from '../utils/pathHelpers'
@@ -188,6 +188,7 @@ export function FileTree({
     height: number
   } | null>(null)
   const treeRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const selectedPathsRef = useRef(selectedPaths)
   const skipClickRef = useRef(false)
   const multiSelectModeRef = useRef(false)
@@ -336,6 +337,27 @@ export function FileTree({
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', onScroll, true)
     }
+  }, [menu])
+
+  /** Keep the context menu inside the window when opened near the bottom/right edge. */
+  useLayoutEffect(() => {
+    if (!menu) return
+    const el = menuRef.current
+    if (!el) return
+    const pad = 8
+    const { width, height } = el.getBoundingClientRect()
+    let x = menu.x
+    let y = menu.y
+    if (y + height > window.innerHeight - pad) {
+      y = Math.max(pad, window.innerHeight - height - pad)
+    }
+    if (x + width > window.innerWidth - pad) {
+      x = Math.max(pad, window.innerWidth - width - pad)
+    }
+    if (x < pad) x = pad
+    if (y < pad) y = pad
+    el.style.left = `${x}px`
+    el.style.top = `${y}px`
   }, [menu])
 
   useEffect(() => {
@@ -685,6 +707,7 @@ export function FileTree({
       })}
       {menu ? (
         <div
+          ref={menuRef}
           className="tree-context-menu"
           style={{ left: menu.x, top: menu.y }}
           onMouseDown={(e) => e.stopPropagation()}
