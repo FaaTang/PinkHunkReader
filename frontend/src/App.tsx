@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import './App.css'
 import './styles/theme.css'
 import logo from './assets/logo.svg'
@@ -189,6 +189,10 @@ async function applyCloseSaveChoice(
 }
 
 const EXPLORER_OPEN_KEY = 'pinkhunk-reader.explorer-open.v1'
+const EXPLORER_WIDTH_KEY = 'pinkhunk-reader.explorer-width.v1'
+const EXPLORER_WIDTH_DEFAULT = 280
+const EXPLORER_WIDTH_MIN = 180
+const EXPLORER_WIDTH_MAX = 560
 
 function loadExplorerOpen(): boolean {
   try {
@@ -197,6 +201,21 @@ function loadExplorerOpen(): boolean {
     return raw === '1' || raw === 'true'
   } catch {
     return true
+  }
+}
+
+function clampExplorerWidth(n: number): number {
+  if (!Number.isFinite(n)) return EXPLORER_WIDTH_DEFAULT
+  return Math.min(EXPLORER_WIDTH_MAX, Math.max(EXPLORER_WIDTH_MIN, Math.round(n)))
+}
+
+function loadExplorerWidth(): number {
+  try {
+    const raw = localStorage.getItem(EXPLORER_WIDTH_KEY)
+    if (raw === null) return EXPLORER_WIDTH_DEFAULT
+    return clampExplorerWidth(Number(raw))
+  } catch {
+    return EXPLORER_WIDTH_DEFAULT
   }
 }
 
@@ -217,6 +236,7 @@ function AppShell() {
   /** Block empty persist until launch restore finishes (or is skipped), so a failed restore cannot wipe a good session. */
   const sessionPersistAllowedRef = useRef(false)
   const [explorerOpen, setExplorerOpenState] = useState(loadExplorerOpen)
+  const [explorerWidth, setExplorerWidthState] = useState(loadExplorerWidth)
   const setExplorerOpen = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
     setExplorerOpenState((prev) => {
       const next = typeof value === 'function' ? value(prev) : value
@@ -227,6 +247,49 @@ function AppShell() {
       }
       return next
     })
+  }, [])
+  const setExplorerWidth = useCallback((value: number | ((prev: number) => number)) => {
+    setExplorerWidthState((prev) => {
+      const next = clampExplorerWidth(typeof value === 'function' ? value(prev) : value)
+      try {
+        localStorage.setItem(EXPLORER_WIDTH_KEY, String(next))
+      } catch {
+        /* ignore quota / private mode */
+      }
+      return next
+    })
+  }, [])
+  const explorerResizeRef = useRef<{ pointerId: number; startX: number; startW: number } | null>(null)
+
+  const onExplorerResizePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    explorerResizeRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startW: explorerWidth,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    document.body.classList.add('is-resizing-explorer')
+  }, [explorerWidth])
+
+  const onExplorerResizePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = explorerResizeRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    setExplorerWidth(drag.startW + (e.clientX - drag.startX))
+  }, [setExplorerWidth])
+
+  const endExplorerResize = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = explorerResizeRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    explorerResizeRef.current = null
+    document.body.classList.remove('is-resizing-explorer')
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* already released */
+    }
   }, [])
   const [closePrompt, setClosePrompt] = useState<{
     path: string
@@ -1617,7 +1680,13 @@ function AppShell() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       <div className="body">
-        <aside className="sidebar" style={{ ['--wails-drop-target' as string]: 'drop' }}>
+        <aside
+          className="sidebar"
+          style={{
+            width: explorerWidth,
+            ['--wails-drop-target' as string]: 'drop',
+          }}
+        >
           <div className="sidebar-title">
             <span className="sidebar-title-text">Explorer</span>
             <button
@@ -1672,6 +1741,17 @@ function AppShell() {
               </div>
             </div>
           )}
+          <div
+            className="sidebar-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize explorer"
+            title="Drag to resize explorer"
+            onPointerDown={onExplorerResizePointerDown}
+            onPointerMove={onExplorerResizePointerMove}
+            onPointerUp={endExplorerResize}
+            onPointerCancel={endExplorerResize}
+          />
         </aside>
 
         <section className="main">

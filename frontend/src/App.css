@@ -83,6 +83,7 @@ html.platform-mac {
 }
 
 .sidebar {
+  position: relative;
   width: var(--ph-sidebar-width);
   flex-shrink: 0;
   border-right: 1px solid var(--ph-br-1);
@@ -90,6 +91,34 @@ html.platform-mac {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active,
+body.is-resizing-explorer .sidebar-resize-handle {
+  background: color-mix(in srgb, var(--ph-accent) 35%, transparent);
+}
+
+body.is-resizing-explorer {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.is-resizing-explorer * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .sidebar-title {

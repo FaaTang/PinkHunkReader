@@ -7,9 +7,16 @@ import { usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
 import { toUint8Array } from '../util/bytes'
 import './viewers.css'
 
-/** True for OLE Compound File (.doc) magic, not OOXML (.docx ZIP). */
-function isOleCompound(bytes: Uint8Array): boolean {
-  return bytes.length >= 2 && bytes[0] === 0xd0 && bytes[1] === 0xcf
+/** OOXML / ZIP local-file header (PK‥). */
+function isZipBytes(bytes: Uint8Array): boolean {
+  return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b
+}
+
+/** Legacy Word 97–2003 extension (.doc), not .docx. */
+function isLegacyDocName(nameOrPath: string): boolean {
+  const lower = nameOrPath.toLowerCase().replace(/\\/g, '/')
+  const base = lower.includes('/') ? lower.slice(lower.lastIndexOf('/') + 1) : lower
+  return base.endsWith('.doc') && !base.endsWith('.docx')
 }
 
 /** Escape plain text and wrap lines as paragraphs for the Word preview chrome. */
@@ -66,6 +73,11 @@ export function prepareWordHtml(rawHtml: string): PreparedDoc {
   return { html: root.innerHTML, headings }
 }
 
+async function loadLegacyDocHtml(filePath: string): Promise<PreparedDoc> {
+  const text = await ExtractLegacyDocText(filePath)
+  return prepareWordHtml(legacyDocTextToHtml(text))
+}
+
 export function WordView({ path, name, active = true }: Props) {
   const docRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -113,14 +125,12 @@ export function WordView({ path, name, active = true }: Props) {
       try {
         const bytes = await ReadBytes(path)
         const u8 = toUint8Array(bytes)
-        const lower = name.toLowerCase()
-        const legacyName = lower.endsWith('.doc') && !lower.endsWith('.docx')
+        const legacyDoc = isLegacyDocName(name) || isLegacyDocName(path)
 
-        // Legacy OLE .doc: text extract via Go (mammoth only handles OOXML).
-        if (legacyName && isOleCompound(u8)) {
-          const text = await ExtractLegacyDocText(path)
+        // Legacy .doc that is not OOXML/ZIP must not go through mammoth (JSZip).
+        if (legacyDoc && !isZipBytes(u8)) {
+          const prepared = await loadLegacyDocHtml(path)
           if (cancelled) return
-          const prepared = prepareWordHtml(legacyDocTextToHtml(text))
           setHtml(prepared.html)
           setHeadings(prepared.headings)
           setMessages(['Legacy .doc preview is text-only; formatting may be incomplete.'])
@@ -130,18 +140,35 @@ export function WordView({ path, name, active = true }: Props) {
 
         const ab = new ArrayBuffer(u8.byteLength)
         new Uint8Array(ab).set(u8)
-        const result = await mammoth.convertToHtml({ arrayBuffer: ab })
-        if (cancelled) return
-        const prepared = prepareWordHtml(result.value || '')
-        setHtml(prepared.html)
-        setHeadings(prepared.headings)
-        setMessages(
-          (result.messages ?? [])
-            .filter((m) => m.type === 'warning' || m.type === 'error')
-            .map((m) => m.message)
-            .slice(0, 8),
-        )
-        setLoading(false)
+        try {
+          const result = await mammoth.convertToHtml({ arrayBuffer: ab })
+          if (cancelled) return
+          const prepared = prepareWordHtml(result.value || '')
+          setHtml(prepared.html)
+          setHeadings(prepared.headings)
+          setMessages(
+            (result.messages ?? [])
+              .filter((m) => m.type === 'warning' || m.type === 'error')
+              .map((m) => m.message)
+              .slice(0, 8),
+          )
+          setLoading(false)
+        } catch (mammothErr) {
+          // Misnamed / corrupt zip-like .doc — fall back to Go text extract.
+          if (legacyDoc) {
+            const prepared = await loadLegacyDocHtml(path)
+            if (cancelled) return
+            setHtml(prepared.html)
+            setHeadings(prepared.headings)
+            setMessages([
+              'Legacy .doc preview is text-only; formatting may be incomplete.',
+              String(mammothErr),
+            ].slice(0, 8))
+            setLoading(false)
+            return
+          }
+          throw mammothErr
+        }
       } catch (e) {
         if (!cancelled) {
           setError(String(e))
