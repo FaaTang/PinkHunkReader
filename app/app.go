@@ -355,18 +355,6 @@ func (a *App) ReadBytes(path string) ([]byte, error) {
 	return fsx.ReadBytes(a.guard, path)
 }
 
-// ExtractLegacyDocText returns plain text from a legacy Word 97–2003 (.doc) file.
-func (a *App) ExtractLegacyDocText(path string) (string, error) {
-	if a.guard == nil {
-		return "", errNoRoot()
-	}
-	data, err := fsx.ReadBytes(a.guard, path)
-	if err != nil {
-		return "", err
-	}
-	return fsx.ExtractLegacyDocText(data)
-}
-
 func errNoRoot() error {
 	return errString("Open a folder first")
 }

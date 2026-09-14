@@ -17,8 +17,6 @@ export function DetectKind(arg1:string):Promise<string>;
 
 export function DownloadUpdate():Promise<define.QueryResult>;
 
-export function ExtractLegacyDocText(arg1:string):Promise<string>;
-
 export function FileExists(arg1:string):Promise<boolean>;
 
 export function GetAppInfo():Promise<define.QueryResult>;

@@ -1,38 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import mammoth from 'mammoth'
-import { ExtractLegacyDocText, ReadBytes } from '../../wailsjs/go/app/App'
+import { ReadBytes } from '../../wailsjs/go/app/App'
 import { MdOutline, type MdHeadingItem } from '../components/MdOutline'
 import { ViewerLoading } from '../components/ViewerLoading'
 import { usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
 import { toUint8Array } from '../util/bytes'
 import './viewers.css'
 
-/** OOXML / ZIP local-file header (PK‥). */
-function isZipBytes(bytes: Uint8Array): boolean {
-  return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b
-}
-
 /** Legacy Word 97–2003 extension (.doc), not .docx. */
 function isLegacyDocName(nameOrPath: string): boolean {
   const lower = nameOrPath.toLowerCase().replace(/\\/g, '/')
   const base = lower.includes('/') ? lower.slice(lower.lastIndexOf('/') + 1) : lower
   return base.endsWith('.doc') && !base.endsWith('.docx')
-}
-
-/** Escape plain text and wrap lines as paragraphs for the Word preview chrome. */
-function legacyDocTextToHtml(text: string): string {
-  const raw = (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
-  if (!raw) return '<p>(empty document)</p>'
-  return raw
-    .split('\n')
-    .map((line) => {
-      const escaped = line
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-      return escaped ? `<p>${escaped}</p>` : '<p><br></p>'
-    })
-    .join('')
 }
 
 interface Props {
@@ -48,6 +27,8 @@ interface PreparedDoc {
 }
 
 const PAGE_WIDTH = 816
+const LEGACY_DOC_UNSUPPORTED =
+  'Legacy .doc is not supported. Please save as .docx and open again.'
 
 /** Tag mammoth HTML headings with stable ids and collect outline entries. */
 export function prepareWordHtml(rawHtml: string): PreparedDoc {
@@ -71,11 +52,6 @@ export function prepareWordHtml(rawHtml: string): PreparedDoc {
   })
 
   return { html: root.innerHTML, headings }
-}
-
-async function loadLegacyDocHtml(filePath: string): Promise<PreparedDoc> {
-  const text = await ExtractLegacyDocText(filePath)
-  return prepareWordHtml(legacyDocTextToHtml(text))
 }
 
 export function WordView({ path, name, active = true }: Props) {
@@ -121,57 +97,35 @@ export function WordView({ path, name, active = true }: Props) {
     setMessages([])
     setActiveLine(1)
 
+    if (isLegacyDocName(name) || isLegacyDocName(path)) {
+      setError(LEGACY_DOC_UNSUPPORTED)
+      setLoading(false)
+      return
+    }
+
     ;(async () => {
       try {
         const bytes = await ReadBytes(path)
         const u8 = toUint8Array(bytes)
-        const legacyDoc = isLegacyDocName(name) || isLegacyDocName(path)
-
-        // Legacy .doc that is not OOXML/ZIP must not go through mammoth (JSZip).
-        if (legacyDoc && !isZipBytes(u8)) {
-          const prepared = await loadLegacyDocHtml(path)
-          if (cancelled) return
-          setHtml(prepared.html)
-          setHeadings(prepared.headings)
-          setMessages(['Legacy .doc preview is text-only; formatting may be incomplete.'])
-          setLoading(false)
-          return
-        }
-
         const ab = new ArrayBuffer(u8.byteLength)
         new Uint8Array(ab).set(u8)
-        try {
-          const result = await mammoth.convertToHtml({ arrayBuffer: ab })
-          if (cancelled) return
-          const prepared = prepareWordHtml(result.value || '')
-          setHtml(prepared.html)
-          setHeadings(prepared.headings)
-          setMessages(
-            (result.messages ?? [])
-              .filter((m) => m.type === 'warning' || m.type === 'error')
-              .map((m) => m.message)
-              .slice(0, 8),
-          )
-          setLoading(false)
-        } catch (mammothErr) {
-          // Misnamed / corrupt zip-like .doc — fall back to Go text extract.
-          if (legacyDoc) {
-            const prepared = await loadLegacyDocHtml(path)
-            if (cancelled) return
-            setHtml(prepared.html)
-            setHeadings(prepared.headings)
-            setMessages([
-              'Legacy .doc preview is text-only; formatting may be incomplete.',
-              String(mammothErr),
-            ].slice(0, 8))
-            setLoading(false)
-            return
-          }
-          throw mammothErr
-        }
+        const result = await mammoth.convertToHtml({ arrayBuffer: ab })
+        if (cancelled) return
+        const prepared = prepareWordHtml(result.value || '')
+        setHtml(prepared.html)
+        setHeadings(prepared.headings)
+        setMessages(
+          (result.messages ?? [])
+            .filter((m) => m.type === 'warning' || m.type === 'error')
+            .map((m) => m.message)
+            .slice(0, 8),
+        )
       } catch (e) {
         if (!cancelled) {
           setError(String(e))
+        }
+      } finally {
+        if (!cancelled) {
           setLoading(false)
         }
       }
