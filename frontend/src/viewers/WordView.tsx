@@ -1,11 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import mammoth from 'mammoth'
-import { ReadBytes } from '../../wailsjs/go/app/App'
+import { ExtractLegacyDocText, ReadBytes } from '../../wailsjs/go/app/App'
 import { MdOutline, type MdHeadingItem } from '../components/MdOutline'
 import { ViewerLoading } from '../components/ViewerLoading'
 import { usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
 import { toUint8Array } from '../util/bytes'
 import './viewers.css'
+
+/** True for OLE Compound File (.doc) magic, not OOXML (.docx ZIP). */
+function isOleCompound(bytes: Uint8Array): boolean {
+  return bytes.length >= 2 && bytes[0] === 0xd0 && bytes[1] === 0xcf
+}
+
+/** Escape plain text and wrap lines as paragraphs for the Word preview chrome. */
+function legacyDocTextToHtml(text: string): string {
+  const raw = (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+  if (!raw) return '<p>(empty document)</p>'
+  return raw
+    .split('\n')
+    .map((line) => {
+      const escaped = line
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+      return escaped ? `<p>${escaped}</p>` : '<p><br></p>'
+    })
+    .join('')
+}
 
 interface Props {
   path: string
@@ -88,17 +109,25 @@ export function WordView({ path, name, active = true }: Props) {
     setMessages([])
     setActiveLine(1)
 
-    const lower = name.toLowerCase()
-    if (lower.endsWith('.doc') && !lower.endsWith('.docx')) {
-      setError('Legacy .doc is not supported. Please save as .docx and open again.')
-      setLoading(false)
-      return
-    }
-
     ;(async () => {
       try {
         const bytes = await ReadBytes(path)
         const u8 = toUint8Array(bytes)
+        const lower = name.toLowerCase()
+        const legacyName = lower.endsWith('.doc') && !lower.endsWith('.docx')
+
+        // Legacy OLE .doc: text extract via Go (mammoth only handles OOXML).
+        if (legacyName && isOleCompound(u8)) {
+          const text = await ExtractLegacyDocText(path)
+          if (cancelled) return
+          const prepared = prepareWordHtml(legacyDocTextToHtml(text))
+          setHtml(prepared.html)
+          setHeadings(prepared.headings)
+          setMessages(['Legacy .doc preview is text-only; formatting may be incomplete.'])
+          setLoading(false)
+          return
+        }
+
         const ab = new ArrayBuffer(u8.byteLength)
         new Uint8Array(ab).set(u8)
         const result = await mammoth.convertToHtml({ arrayBuffer: ab })

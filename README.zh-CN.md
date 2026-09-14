@@ -23,6 +23,7 @@ PinkHunkReader 基于 **Wails (Go)** 与 **React**，用于本地文件夹浏览
 - **Markdown**：左右分栏编辑 + 实时预览（GFM）
 - **文本 / 代码**：Monaco 编辑器，常见后缀高亮；JSON 支持 `Ctrl+Shift+M` / `Cmd+Shift+M` 格式化与压缩切换
 - **PDF**：按页预览（PDF.js）
+- **Word**：`.docx`（HTML）与旧版 `.doc`（纯文本）只读预览；有标题时可显示大纲
 - **Excel**：`.xlsx` / `.xls` 只读表格预览（列宽拖拽、双击列标自适应、单击单元格复制）
 - **图片**：PNG / JPG / GIF / WebP / SVG 等
 - **大文件**：文本 / Markdown 超过可配置阈值（Settings → General，默认 **100MB**，最小 1MB，无上限）采用「流式加载」——Go 端缓存行号偏移索引 + `ReadSlice` 分批读取，内容只增不减地填充进 Monaco（自带虚拟渲染），滚动接近底部自动预取下一批。分页只影响加载，不改变可编辑与保存：保存前会自动补全尚未加载的尾部再写入。修改阈值后对新打开的文件生效。

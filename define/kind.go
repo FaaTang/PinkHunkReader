@@ -40,7 +40,7 @@ var textExt = map[string]struct{}{
 	".lock": {}, // package-lock / yarn.lock / Cargo.lock (text)
 }
 
-// wordExt: Word — read-only preview (docx; legacy .doc may fail in viewer).
+// wordExt: Word — read-only preview (.docx HTML via mammoth; legacy .doc text via Go).
 var wordExt = map[string]struct{}{
 	".docx": {}, ".doc": {},
 }

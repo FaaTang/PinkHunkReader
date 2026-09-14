@@ -30,6 +30,10 @@ export function DownloadUpdate() {
   return window['go']['app']['App']['DownloadUpdate']();
 }
 
+export function ExtractLegacyDocText(arg1) {
+  return window['go']['app']['App']['ExtractLegacyDocText'](arg1);
+}
+
 export function FileExists(arg1) {
   return window['go']['app']['App']['FileExists'](arg1);
 }
