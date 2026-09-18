@@ -47,47 +47,66 @@ func persistWindowGeometry(configDir string, geo windowGeometry) error {
 	return writeJSONAtomic(windowGeometryPath(configDir), geo)
 }
 
+// allowFirstOpenWindowGeometry is true only for an empty primary app start
+// (Start Menu / desktop icon). Shell "Open with" (--open=…) and child windows
+// (--window-id=) must never run first-open resize/center.
+func allowFirstOpenWindowGeometry(opts launchOptions) bool {
+	if opts.FromCLIWindowID {
+		return false
+	}
+	if len(collectLaunchPaths(opts)) > 0 {
+		return false
+	}
+	return true
+}
+
+func (a *App) applyRestoredWindowGeometry(ctx context.Context, geo *windowGeometry) {
+	if geo == nil {
+		runtime.WindowShow(ctx)
+		return
+	}
+	if geo.Maximized {
+		// StartHidden: Maximise before Show is unreliable on Windows — show first.
+		runtime.WindowShow(ctx)
+		runtime.WindowMaximise(ctx)
+		return
+	}
+	runtime.WindowSetSize(ctx, geo.Width, geo.Height)
+	runtime.WindowSetPosition(ctx, geo.X, geo.Y)
+	runtime.WindowShow(ctx)
+	// Re-apply after show so StartHidden does not drop size/position.
+	runtime.WindowSetSize(ctx, geo.Width, geo.Height)
+	runtime.WindowSetPosition(ctx, geo.X, geo.Y)
+}
+
 func (a *App) applyStartupWindowGeometry(ctx context.Context) {
 	configDir := resolveAppConfigDir()
 	screenW, screenH := resolveScreenSize(ctx)
 	geo, err := loadWindowGeometry(configDir)
 	hasValid := err == nil && geo != nil && geo.Width >= 400 && geo.Height >= 300 && !isCreatePlaceholderGeometry(geo, screenW, screenH)
-	// Child windows (--window-id= on argv): restore last bounds only — never first-open center.
-	if a.launch.FromCLIWindowID {
+	allowFirstOpen := allowFirstOpenWindowGeometry(a.launch)
+	// Any non-empty launch (shell open / child): restore remembered bounds only.
+	if !allowFirstOpen {
 		a.applyFirstOpenGeometry = false
 		if hasValid {
-			if geo.Maximized {
-				runtime.WindowMaximise(ctx)
-				runtime.WindowShow(ctx)
-				return
-			}
-			runtime.WindowSetSize(ctx, geo.Width, geo.Height)
-			runtime.WindowSetPosition(ctx, geo.X, geo.Y)
-			runtime.WindowShow(ctx)
+			a.applyRestoredWindowGeometry(ctx, geo)
 			return
 		}
+		// No saved bounds: show create size as-is — do not force 85% + center.
 		runtime.WindowShow(ctx)
 		return
 	}
 	if hasValid {
 		a.applyFirstOpenGeometry = false
-		if geo.Maximized {
-			runtime.WindowMaximise(ctx)
-			runtime.WindowShow(ctx)
-			return
-		}
-		runtime.WindowSetSize(ctx, geo.Width, geo.Height)
-		runtime.WindowSetPosition(ctx, geo.X, geo.Y)
-		runtime.WindowShow(ctx)
+		a.applyRestoredWindowGeometry(ctx, geo)
 		return
 	}
-	// Primary cold start with no remembered bounds: ~85% screen + center.
+	// Empty primary cold start with no remembered bounds: ~85% screen + center.
 	a.applyFirstOpenGeometry = true
 	width, height := resolveFirstOpenWindowSize(ctx)
 	runtime.WindowSetSize(ctx, width, height)
-	runtime.WindowCenter(ctx)
 	runtime.WindowShow(ctx)
-	// StartHidden: Center before Show can fail to stick on Windows; re-apply after show.
+	// StartHidden: Center before Show can fail to stick on Windows; apply after show.
 	runtime.WindowCenter(ctx)
 }
 

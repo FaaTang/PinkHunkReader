@@ -51,3 +51,15 @@ func TestIsCreatePlaceholderGeometry(t *testing.T) {
 		t.Fatal("expected near-min size on a tiny screen not to force first-open rewrite")
 	}
 }
+
+func TestAllowFirstOpenRejectsShellOpenArgs(t *testing.T) {
+	if allowFirstOpenWindowGeometry(parseLaunchArgs([]string{`--open-file=D:\x.txt`})) {
+		t.Fatal("open-file must not first-open")
+	}
+	if allowFirstOpenWindowGeometry(parseLaunchArgs([]string{`--open-folder=D:\docs`})) {
+		t.Fatal("open-folder must not first-open")
+	}
+	if !allowFirstOpenWindowGeometry(parseLaunchArgs([]string{})) {
+		t.Fatal("bare start must allow first-open")
+	}
+}

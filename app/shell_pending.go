@@ -84,7 +84,11 @@ func (a *App) claimShellPending() {
 		runtime.EventsEmit(a.ctx, "app:shell-open", req)
 	}
 	runtime.WindowShow(a.ctx)
-	runtime.WindowUnminimise(a.ctx)
+	// Only unminimise when actually minimised. Calling Unminimise on a maximised
+	// window can restore it to normal size on Windows (looks like a sudden shrink).
+	if runtime.WindowIsMinimised(a.ctx) {
+		runtime.WindowUnminimise(a.ctx)
+	}
 }
 
 func (a *App) isPreferredShellTarget() bool {

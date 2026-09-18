@@ -76,6 +76,7 @@ import {
   WindowCenter,
   WindowGetSize,
   WindowIsMaximised,
+  WindowIsMinimised,
   WindowSetSize,
   WindowShow,
   WindowUnminimise,
@@ -626,14 +627,20 @@ function AppShell() {
     setStatus(`Restored ${restored.length} tab${restored.length === 1 ? '' : 's'}`)
   }, [restoreTabsFromSession])
 
-  // First-open size + center: only when Go marked this process as a primary start.
-  // Child windows (SpawnNewWindow / --window-id=) must not re-center or resize.
+  // First-open size + center: only empty primary start (Go applyFirstOpenGeometry).
+  // Shell "Open with" / SpawnNewWindow children must never resize or re-center here.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         const launch = await GetLaunchInfo()
         if (cancelled || !launch?.applyFirstOpenGeometry) return
+        // Shell/CLI open paths: belt-and-suspenders (Go should already clear the flag).
+        const launchPaths = [
+          ...((launch?.openPaths as string[] | undefined) ?? []),
+          ...(launch?.openPath ? [String(launch.openPath)] : []),
+        ].filter(Boolean)
+        if (launchPaths.length > 0) return
         if (await WindowIsMaximised()) return
         const size = await WindowGetSize()
         const viewport = readBrowserScreenWorkArea()
@@ -833,7 +840,14 @@ function AppShell() {
   /** Shell context menu / second-instance handoff: entry only — then openKnownPaths. */
   const openShellPaths = useCallback(async (paths: string[]) => {
     WindowShow()
-    WindowUnminimise()
+    // Do not Unminimise unless minimised — on Windows it can unmaximise / shrink.
+    try {
+      if (await WindowIsMinimised()) {
+        WindowUnminimise()
+      }
+    } catch {
+      /* ignore */
+    }
     await openKnownPaths(paths)
   }, [openKnownPaths])
 

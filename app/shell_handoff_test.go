@@ -39,6 +39,21 @@ func TestParseLaunchArgsWindowID(t *testing.T) {
 	}
 }
 
+func TestAllowFirstOpenWindowGeometry(t *testing.T) {
+	empty := parseLaunchArgs(nil)
+	if !allowFirstOpenWindowGeometry(empty) {
+		t.Fatal("empty primary start should allow first-open geometry")
+	}
+	shell := parseLaunchArgs([]string{`--open=C:\a.md`})
+	if allowFirstOpenWindowGeometry(shell) {
+		t.Fatal("shell --open must not allow first-open geometry")
+	}
+	child := parseLaunchArgs([]string{"--window-id=abc", `--open-file=C:\a.md`})
+	if allowFirstOpenWindowGeometry(child) {
+		t.Fatal("child --window-id must not allow first-open geometry")
+	}
+}
+
 func TestCollectLaunchPathsDedup(t *testing.T) {
 	opts := launchOptions{
 		OpenPath:  `C:\A.md`,
