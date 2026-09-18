@@ -17,6 +17,9 @@ type launchOptions struct {
 	OpenIsDir     bool
 	ShouldRestore bool
 	SpawnRestores []string
+	// FromCLIWindowID is true when --window-id= was on the process argv
+	// (spawned / restored child). Primary cold starts assign WindowID in-process only.
+	FromCLIWindowID bool
 }
 
 func parseLaunchArgs(args []string) launchOptions {
@@ -29,6 +32,7 @@ func parseLaunchArgs(args []string) launchOptions {
 		switch {
 		case strings.HasPrefix(arg, "--window-id="):
 			opts.WindowID = strings.TrimSpace(strings.TrimPrefix(arg, "--window-id="))
+			opts.FromCLIWindowID = true
 		case strings.HasPrefix(arg, "--open-folder="):
 			p := strings.TrimSpace(strings.TrimPrefix(arg, "--open-folder="))
 			opts.OpenPaths = append(opts.OpenPaths, p)
@@ -133,11 +137,12 @@ func (a *App) GetLaunchInfo() define.LaunchInfo {
 		paths = []string{a.launch.OpenPath}
 	}
 	return define.LaunchInfo{
-		WindowID:      a.launch.WindowID,
-		OpenPath:      a.launch.OpenPath,
-		OpenPaths:     paths,
-		OpenIsDir:     a.launch.OpenIsDir,
-		ShouldRestore: a.launch.ShouldRestore,
+		WindowID:               a.launch.WindowID,
+		OpenPath:               a.launch.OpenPath,
+		OpenPaths:              paths,
+		OpenIsDir:              a.launch.OpenIsDir,
+		ShouldRestore:          a.launch.ShouldRestore,
+		ApplyFirstOpenGeometry: a.applyFirstOpenGeometry,
 	}
 }
 
@@ -159,6 +164,9 @@ func (a *App) SpawnNewWindow(openPath string, isDir bool) (string, error) {
 	if openPath == "" {
 		return "", fmt.Errorf("empty open path")
 	}
+	// Persist current bounds so the child restores size/position instead of
+	// re-running first-open center (that is reserved for primary app start).
+	a.saveCurrentWindowGeometry(a.ctx)
 	id := newWindowID()
 	// Seed an empty session so restore has a file if needed.
 	_ = a.SaveWindowSession(define.WindowSessionState{

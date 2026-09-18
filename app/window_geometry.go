@@ -51,7 +51,26 @@ func (a *App) applyStartupWindowGeometry(ctx context.Context) {
 	configDir := resolveAppConfigDir()
 	screenW, screenH := resolveScreenSize(ctx)
 	geo, err := loadWindowGeometry(configDir)
-	if err == nil && geo != nil && geo.Width >= 400 && geo.Height >= 300 && !isCreatePlaceholderGeometry(geo, screenW, screenH) {
+	hasValid := err == nil && geo != nil && geo.Width >= 400 && geo.Height >= 300 && !isCreatePlaceholderGeometry(geo, screenW, screenH)
+	// Child windows (--window-id= on argv): restore last bounds only — never first-open center.
+	if a.launch.FromCLIWindowID {
+		a.applyFirstOpenGeometry = false
+		if hasValid {
+			if geo.Maximized {
+				runtime.WindowMaximise(ctx)
+				runtime.WindowShow(ctx)
+				return
+			}
+			runtime.WindowSetSize(ctx, geo.Width, geo.Height)
+			runtime.WindowSetPosition(ctx, geo.X, geo.Y)
+			runtime.WindowShow(ctx)
+			return
+		}
+		runtime.WindowShow(ctx)
+		return
+	}
+	if hasValid {
+		a.applyFirstOpenGeometry = false
 		if geo.Maximized {
 			runtime.WindowMaximise(ctx)
 			runtime.WindowShow(ctx)
@@ -62,10 +81,14 @@ func (a *App) applyStartupWindowGeometry(ctx context.Context) {
 		runtime.WindowShow(ctx)
 		return
 	}
+	// Primary cold start with no remembered bounds: ~85% screen + center.
+	a.applyFirstOpenGeometry = true
 	width, height := resolveFirstOpenWindowSize(ctx)
 	runtime.WindowSetSize(ctx, width, height)
 	runtime.WindowCenter(ctx)
 	runtime.WindowShow(ctx)
+	// StartHidden: Center before Show can fail to stick on Windows; re-apply after show.
+	runtime.WindowCenter(ctx)
 }
 
 func resolveFirstOpenWindowSize(ctx context.Context) (int, int) {

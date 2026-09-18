@@ -27,8 +27,15 @@ func TestParseLaunchArgsWindowID(t *testing.T) {
 	if opts.WindowID != "abc" {
 		t.Fatalf("WindowID=%q", opts.WindowID)
 	}
+	if !opts.FromCLIWindowID {
+		t.Fatal("expected FromCLIWindowID for spawned/restored child argv")
+	}
 	if !opts.OpenIsDir {
 		t.Fatal("expected OpenIsDir")
+	}
+	primary := parseLaunchArgs([]string{`--open-file=C:\a.md`})
+	if primary.FromCLIWindowID {
+		t.Fatal("primary start without --window-id must not set FromCLIWindowID")
 	}
 }
 

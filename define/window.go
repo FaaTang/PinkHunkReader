@@ -7,6 +7,9 @@ type LaunchInfo struct {
 	OpenPaths     []string `json:"openPaths"`
 	OpenIsDir     bool     `json:"openIsDir"`
 	ShouldRestore bool     `json:"shouldRestore"`
+	// ApplyFirstOpenGeometry is true only for a primary app start that used
+	// screen-ratio sizing + center (not child windows from SpawnNewWindow / restore).
+	ApplyFirstOpenGeometry bool `json:"applyFirstOpenGeometry"`
 }
 
 // WindowSessionState is persisted per window on disk.

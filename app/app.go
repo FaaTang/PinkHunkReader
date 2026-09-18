@@ -26,6 +26,9 @@ type App struct {
 
 	windowID string
 	launch   launchOptions
+	// applyFirstOpenGeometry is set during Startup when this process used
+	// screen-ratio first-open sizing + center (primary start only).
+	applyFirstOpenGeometry bool
 }
 
 func NewApp() *App {

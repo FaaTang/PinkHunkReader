@@ -89,6 +89,7 @@ export namespace define {
 	    openPaths: string[];
 	    openIsDir: boolean;
 	    shouldRestore: boolean;
+	    applyFirstOpenGeometry: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new LaunchInfo(source);
@@ -101,6 +102,7 @@ export namespace define {
 	        this.openPaths = source["openPaths"];
 	        this.openIsDir = source["openIsDir"];
 	        this.shouldRestore = source["shouldRestore"];
+	        this.applyFirstOpenGeometry = source["applyFirstOpenGeometry"];
 	    }
 	}
 	export class MdHeading {

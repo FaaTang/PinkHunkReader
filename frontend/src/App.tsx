@@ -626,20 +626,24 @@ function AppShell() {
     setStatus(`Restored ${restored.length} tab${restored.length === 1 ? '' : 's'}`)
   }, [restoreTabsFromSession])
 
-  // First-open / placeholder size: align with PinkHunkDB (~85% of screen work area).
-  // Go may restore a stuck 900×560 create size; browser screen metrics correct it after show.
+  // First-open size + center: only when Go marked this process as a primary start.
+  // Child windows (SpawnNewWindow / --window-id=) must not re-center or resize.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
+        const launch = await GetLaunchInfo()
+        if (cancelled || !launch?.applyFirstOpenGeometry) return
         if (await WindowIsMaximised()) return
         const size = await WindowGetSize()
         const viewport = readBrowserScreenWorkArea()
         // Wails Size uses w/h, not width/height.
-        if (!isCreatePlaceholderWindowBounds({ width: size.w, height: size.h }, viewport)) return
-        if (cancelled) return
-        const next = resolveFirstOpenWindowBounds(viewport)
-        WindowSetSize(next.width, next.height)
+        if (isCreatePlaceholderWindowBounds({ width: size.w, height: size.h }, viewport)) {
+          if (cancelled) return
+          const next = resolveFirstOpenWindowBounds(viewport)
+          WindowSetSize(next.width, next.height)
+        }
+        // Re-center after show: StartHidden can drop the Go-side Center on Windows.
         WindowCenter()
         WindowShow()
       } catch {
