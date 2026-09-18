@@ -23,8 +23,13 @@ func ListDir(g *Guard, path string) ([]define.DirEntry, error) {
 	out := make([]define.DirEntry, 0, len(entries))
 	for _, e := range entries {
 		name := e.Name()
-		full := filepath.Join(abs, name)
 		isDir := e.IsDir()
+		// Skip Microsoft Office lock/owner files (~$foo.docx) — they appear while
+		// Word/Excel has a document open and are not real documents to browse.
+		if !isDir && isOfficeLockFile(name) {
+			continue
+		}
+		full := filepath.Join(abs, name)
 		kind := define.KindDirectory
 		if !isDir {
 			kind = define.DetectKind(full)
@@ -44,6 +49,12 @@ func ListDir(g *Guard, path string) ([]define.DirEntry, error) {
 		return stringsLessFold(out[i].Name, out[j].Name)
 	})
 	return out, nil
+}
+
+// isOfficeLockFile reports Microsoft Office temporary owner/lock files.
+// Word/Excel create "~$" + truncated document name while a file is open.
+func isOfficeLockFile(name string) bool {
+	return len(name) >= 2 && name[0] == '~' && name[1] == '$'
 }
 
 func stringsLessFold(a, b string) bool {
