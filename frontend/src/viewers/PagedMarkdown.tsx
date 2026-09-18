@@ -14,6 +14,7 @@ import {
 import { useMonacoPaging } from '../hooks/useMonacoPaging'
 import { useRegisterGoTo } from '../settings/AppSettingsContext'
 import { hasOutlinePreference, usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
+import { scrollPreviewToHeading } from '../utils/mdHeadingAnchor'
 import { MarkdownPreview } from './MarkdownPreview'
 import './viewers.css'
 
@@ -184,8 +185,8 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
     if (root) {
       const heads = root.querySelectorAll('h1,h2,h3,h4,h5,h6')
       for (const h of Array.from(heads)) {
-        if ((h.textContent ?? '').trim() === title) {
-          h.scrollIntoView({ block: 'start' })
+        if (h instanceof HTMLElement && (h.textContent ?? '').trim() === title) {
+          scrollPreviewToHeading(h)
           break
         }
       }

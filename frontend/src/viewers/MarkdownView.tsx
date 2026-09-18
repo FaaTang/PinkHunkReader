@@ -6,6 +6,7 @@ import { MdViewModeToggle, type MdViewMode } from '../components/MdViewModeToggl
 import { MarkdownPreview } from './MarkdownPreview'
 import { usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
 import { useRegisterGoTo } from '../settings/AppSettingsContext'
+import { scrollPreviewToHeading } from '../utils/mdHeadingAnchor'
 import './viewers.css'
 
 interface Props {
@@ -51,8 +52,8 @@ export function MarkdownView({ path, content, editable, active = true, onChange 
     if (!root) return
     const heads = root.querySelectorAll('h1,h2,h3,h4,h5,h6')
     for (const h of Array.from(heads)) {
-      if ((h.textContent ?? '').trim() === title) {
-        h.scrollIntoView({ block: 'start' })
+      if (h instanceof HTMLElement && (h.textContent ?? '').trim() === title) {
+        scrollPreviewToHeading(h)
         break
       }
     }
