@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DetectKind, InspectPath, ListDir } from '../../wailsjs/go/app/App'
 import type { DirEntry } from '../types'
 import { folderLabel, parentDir, pathUnderRoot, pathsEqual } from '../utils/pathHelpers'
@@ -339,20 +340,24 @@ export function FileTree({
     }
   }, [menu])
 
-  /** Keep the context menu inside the window when opened near the bottom/right edge. */
+  /** Keep the context menu fully visible (portal to body escapes sidebar overflow clipping). */
   useLayoutEffect(() => {
     if (!menu) return
     const el = menuRef.current
     if (!el) return
     const pad = 8
+    const vw = window.innerWidth
+    const vh = window.innerHeight
     const { width, height } = el.getBoundingClientRect()
     let x = menu.x
     let y = menu.y
-    if (y + height > window.innerHeight - pad) {
-      y = Math.max(pad, window.innerHeight - height - pad)
+    // Prefer opening below the cursor; flip above when near the bottom edge.
+    if (y + height > vh - pad) {
+      const above = menu.y - height
+      y = above >= pad ? above : Math.max(pad, vh - height - pad)
     }
-    if (x + width > window.innerWidth - pad) {
-      x = Math.max(pad, window.innerWidth - width - pad)
+    if (x + width > vw - pad) {
+      x = Math.max(pad, vw - width - pad)
     }
     if (x < pad) x = pad
     if (y < pad) y = pad
@@ -705,59 +710,62 @@ export function FileTree({
           </div>
         )
       })}
-      {menu ? (
-        <div
-          ref={menuRef}
-          className="tree-context-menu"
-          style={{ left: menu.x, top: menu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-          role="menu"
-        >
-          <button
-            type="button"
-            className="tree-context-item"
-            role="menuitem"
-            onClick={() => {
-              const paths = menu.targets
-              setMenu(null)
-              onRevealInOs(paths)
-            }}
-          >
-            {revealInOsLabel()}
-            {menuCount > 1 ? (
-              <span className="tree-context-sub">{menuCount} items</span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            className="tree-context-item"
-            role="menuitem"
-            onClick={() => {
-              const paths = menu.targets
-              setMenu(null)
-              onRemoveFromWorkspace(paths)
-            }}
-          >
-            Remove from workspace
-            <span className="tree-context-sub">
-              {menuCount === 1
-                ? folderLabel(menu.targets[0])
-                : `${menuCount} items`}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="tree-context-item"
-            role="menuitem"
-            onClick={() => {
-              setMenu(null)
-              onRemoveAllFromWorkspace()
-            }}
-          >
-            Remove all folders
-          </button>
-        </div>
-      ) : null}
+      {menu
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="tree-context-menu"
+              style={{ left: menu.x, top: menu.y }}
+              onMouseDown={(e) => e.stopPropagation()}
+              role="menu"
+            >
+              <button
+                type="button"
+                className="tree-context-item"
+                role="menuitem"
+                onClick={() => {
+                  const paths = menu.targets
+                  setMenu(null)
+                  onRevealInOs(paths)
+                }}
+              >
+                {revealInOsLabel()}
+                {menuCount > 1 ? (
+                  <span className="tree-context-sub">{menuCount} items</span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                className="tree-context-item"
+                role="menuitem"
+                onClick={() => {
+                  const paths = menu.targets
+                  setMenu(null)
+                  onRemoveFromWorkspace(paths)
+                }}
+              >
+                Remove from workspace
+                <span className="tree-context-sub">
+                  {menuCount === 1
+                    ? folderLabel(menu.targets[0])
+                    : `${menuCount} items`}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="tree-context-item"
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null)
+                  onRemoveAllFromWorkspace()
+                }}
+              >
+                Remove all folders
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
       {marquee ? (
         <div
           className="tree-marquee"
