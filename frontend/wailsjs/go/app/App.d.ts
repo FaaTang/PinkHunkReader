@@ -69,6 +69,8 @@ export function ReadSlice(arg1:string,arg2:number,arg3:number):Promise<define.Te
 
 export function ReadText(arg1:string):Promise<string>;
 
+export function ReadyForShellOpen():Promise<Array<define.ShellOpenRequest>>;
+
 export function RegisterWindow(arg1:string):Promise<void>;
 
 export function RemoveRoot(arg1:string):Promise<void>;

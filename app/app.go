@@ -29,6 +29,11 @@ type App struct {
 	// applyFirstOpenGeometry is set during Startup when this process used
 	// screen-ratio first-open sizing + center (primary start only).
 	applyFirstOpenGeometry bool
+
+	// shellOpenMu guards shell-open delivery until the frontend listener is ready.
+	shellOpenMu    sync.Mutex
+	shellOpenReady bool
+	shellOpenBuf   []define.ShellOpenRequest
 }
 
 func NewApp() *App {

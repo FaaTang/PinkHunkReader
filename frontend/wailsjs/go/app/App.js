@@ -134,6 +134,10 @@ export function ReadText(arg1) {
   return window['go']['app']['App']['ReadText'](arg1);
 }
 
+export function ReadyForShellOpen() {
+  return window['go']['app']['App']['ReadyForShellOpen']();
+}
+
 export function RegisterWindow(arg1) {
   return window['go']['app']['App']['RegisterWindow'](arg1);
 }

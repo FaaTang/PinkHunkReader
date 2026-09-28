@@ -181,6 +181,20 @@ export namespace define {
 	        this.contextMenu = source["contextMenu"];
 	    }
 	}
+	export class ShellOpenRequest {
+	    paths: string[];
+	    focus: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShellOpenRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.paths = source["paths"];
+	        this.focus = source["focus"];
+	    }
+	}
 	export class TextSlice {
 	    startLine: number;
 	    endLine: number;

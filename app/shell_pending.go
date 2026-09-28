@@ -80,8 +80,47 @@ func (a *App) claimShellPending() {
 	}
 	// RegisterWindow also takes windowStoreMu — must not run inside withWindowStore.
 	_ = a.touchWindowManifest()
+	a.dispatchShellOpen(requests)
+}
+
+// ReadyForShellOpen marks the frontend listener ready and returns any requests
+// that arrived (via second-instance handoff) before EventsOn was registered.
+func (a *App) ReadyForShellOpen() []define.ShellOpenRequest {
+	if a == nil {
+		return nil
+	}
+	a.shellOpenMu.Lock()
+	a.shellOpenReady = true
+	out := append([]define.ShellOpenRequest{}, a.shellOpenBuf...)
+	a.shellOpenBuf = nil
+	a.shellOpenMu.Unlock()
+	return out
+}
+
+func (a *App) dispatchShellOpen(requests []define.ShellOpenRequest) {
+	if len(requests) == 0 {
+		return
+	}
+	a.shellOpenMu.Lock()
+	ready := a.shellOpenReady
+	if !ready {
+		a.shellOpenBuf = append(a.shellOpenBuf, requests...)
+		a.shellOpenMu.Unlock()
+		// Still surface the window so the user sees the handoff instance.
+		a.focusForShellOpen()
+		return
+	}
+	a.shellOpenMu.Unlock()
+
 	for _, req := range requests {
 		runtime.EventsEmit(a.ctx, "app:shell-open", req)
+	}
+	a.focusForShellOpen()
+}
+
+func (a *App) focusForShellOpen() {
+	if a == nil || a.ctx == nil {
+		return
 	}
 	runtime.WindowShow(a.ctx)
 	// Only unminimise when actually minimised. Calling Unminimise on a maximised

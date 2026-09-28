@@ -59,6 +59,7 @@ import {
   PickAndOpen,
   PickAndSaveFile,
   ReadText,
+  ReadyForShellOpen,
   RevealInFileManager,
   SaveOpenPlacementPrefs,
   SaveWindowSession,
@@ -324,7 +325,9 @@ function AppShell() {
   const missingResolverRef = useRef<((c: KeepMissingChoice) => void) | null>(null)
   const missingPromptedRef = useRef(new Set<string>())
   const missingCheckBusyRef = useRef(false)
-  const openKnownPathsRef = useRef<(paths: string[]) => Promise<void>>(async () => {})
+  /** Shell/CLI paths captured during launch bootstrap; flushed once openKnownPaths is ready. */
+  const pendingLaunchPathsRef = useRef<string[] | null>(null)
+  const [launchOpenNonce, setLaunchOpenNonce] = useState(0)
   const quittingRef = useRef(false)
   const savePhaseRef = useRef<'idle' | 'manual' | 'auto'>('idle')
   const autoSaveBusyRef = useRef(false)
@@ -373,6 +376,10 @@ function AppShell() {
       return
     }
     await AddRoot(abs)
+    // Keep rootsRef in sync immediately — openFile / placement checks run before the next render.
+    if (!rootsRef.current.some((r) => pathsEqual(r, abs))) {
+      rootsRef.current = [...rootsRef.current, abs]
+    }
     setRoots((prev) => (prev.some((r) => pathsEqual(r, abs)) ? prev : [...prev, abs]))
     setStatus(abs)
     setTreeRefresh((n) => n + 1)
@@ -481,18 +488,32 @@ function AppShell() {
   const openFile = useCallback(async (path: string) => {
     setError('')
     try {
-      const info: FileInfo = await StatFile(path)
+      let info: FileInfo
+      try {
+        info = await StatFile(path)
+      } catch {
+        // Guard may not have this path yet (stale frontend roots, or shell open raced AddRoot).
+        await ensureRoot(path)
+        info = await StatFile(path)
+      }
       if (info.isDir) return
 
       let content = ''
+      let contentError = ''
 
       if (info.kind === 'pdf' || info.kind === 'image' || info.kind === 'word' || info.kind === 'excel') {
         setStatus(`${info.name} · ${(info.size / 1024).toFixed(1)} KB`)
       } else if (info.largeMode) {
         setStatus(`${info.name} · paged (viewport × 2)`)
       } else if (info.editable || info.kind === 'markdown' || info.kind === 'text') {
-        content = await ReadText(path)
-        setStatus(`${info.name} · ${(info.size / 1024).toFixed(1)} KB`)
+        try {
+          content = await ReadText(path)
+          setStatus(`${info.name} · ${(info.size / 1024).toFixed(1)} KB`)
+        } catch (e) {
+          // Still open the tab so shell / drag-open is not "explorer only".
+          contentError = String(e)
+          setStatus(`${info.name} · failed to load content`)
+        }
       } else {
         setStatus(`${info.name} · unsupported type`)
       }
@@ -518,10 +539,11 @@ function AppShell() {
       })
       setActivePath(info.path)
       rememberRecent(info.path)
+      if (contentError) setError(contentError)
     } catch (e) {
       setError(String(e))
     }
-  }, [rememberRecent])
+  }, [ensureRoot, rememberRecent])
 
   const restoreTabsFromSession = useCallback(async (session: SessionState, cancelled: () => boolean) => {
     const restored: OpenTab[] = []
@@ -705,14 +727,15 @@ function AppShell() {
           }
         }
 
-        // Shell / CLI paths: skip native picker only; same open file/folder path as Open menu.
+        // Shell / CLI paths: queue for openKnownPaths after bootstrap (same path as Open menu).
         const launchPaths = [
           ...((launch?.openPaths as string[] | undefined) ?? []),
           ...(launch?.openPath ? [String(launch.openPath)] : []),
         ]
         const uniqueLaunch = [...new Set(launchPaths.map((p) => normalizePath(p)).filter(Boolean))]
         if (!cancelled && uniqueLaunch.length) {
-          await openKnownPathsRef.current(uniqueLaunch)
+          pendingLaunchPathsRef.current = uniqueLaunch
+          setLaunchOpenNonce((n) => n + 1)
         }
       } catch (e) {
         if (!cancelled) setError(String(e))
@@ -835,7 +858,14 @@ function AppShell() {
     }
   }, [openPathInPlacement, openPathWithChoice, resolveOpenParentFolder, resolveOpenPlacement])
 
-  openKnownPathsRef.current = openKnownPaths
+  // Flush CLI / shell argv paths once bootstrap finished and openKnownPaths is ready.
+  useEffect(() => {
+    if (!sessionReady) return
+    const paths = pendingLaunchPathsRef.current
+    if (!paths?.length) return
+    pendingLaunchPathsRef.current = null
+    void openKnownPaths(paths)
+  }, [sessionReady, launchOpenNonce, openKnownPaths])
 
   /** Shell context menu / second-instance handoff: entry only — then openKnownPaths. */
   const openShellPaths = useCallback(async (paths: string[]) => {
@@ -1467,18 +1497,49 @@ function AppShell() {
   }, [handleQuitRequested])
 
   useEffect(() => {
-    const off = EventsOn('app:shell-open', (payload: { paths?: string[]; focus?: boolean } | string[]) => {
-      const paths = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.paths)
-          ? payload.paths
-          : []
+    const extractPaths = (payload: unknown): string[] => {
+      if (Array.isArray(payload)) {
+        return payload.filter((p): p is string => typeof p === 'string' && Boolean(p))
+      }
+      if (payload && typeof payload === 'object') {
+        const raw = (payload as { paths?: unknown; Paths?: unknown }).paths
+          ?? (payload as { Paths?: unknown }).Paths
+        if (Array.isArray(raw)) {
+          return raw.filter((p): p is string => typeof p === 'string' && Boolean(p))
+        }
+      }
+      return []
+    }
+    const off = EventsOn('app:shell-open', (...args: unknown[]) => {
+      const paths = args.flatMap((arg) => extractPaths(arg))
+      if (!paths.length) return
       void openShellPaths(paths)
     })
     return () => {
       off()
     }
   }, [openShellPaths])
+
+  // After bootstrap: accept buffered second-instance handoffs that arrived before EventsOn.
+  useEffect(() => {
+    if (!sessionReady) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const buffered = await ReadyForShellOpen()
+        if (cancelled || !Array.isArray(buffered) || !buffered.length) return
+        for (const req of buffered) {
+          const paths = Array.isArray(req?.paths) ? req.paths.filter(Boolean) : []
+          if (paths.length) await openShellPaths(paths)
+        }
+      } catch {
+        /* binding unavailable in browser preview */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionReady, openShellPaths])
 
   useEffect(() => {
     OnFileDrop((_x, _y, paths) => {
