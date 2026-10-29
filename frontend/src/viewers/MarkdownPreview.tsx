@@ -2,6 +2,9 @@ import { memo, useMemo, type MouseEvent } from 'react'
 import type { Components } from 'react-markdown'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import type { PluggableList } from 'unified'
 import {
   createHeadingSlugger,
   findPreviewHeading,
@@ -9,9 +12,20 @@ import {
   scrollPreviewToHeading,
 } from '../utils/mdHeadingAnchor'
 
-const tableComponent: Components['table'] = ({ children }) => (
+/** Allow inline HTML (incl. style) while still stripping script / event handlers. */
+const mdHtmlSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    '*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'style'],
+  },
+}
+
+const rehypePlugins: PluggableList = [rehypeRaw, [rehypeSanitize, mdHtmlSchema]]
+
+const tableComponent: Components['table'] = ({ children, node: _node, ...props }) => (
   <div className="md-table-wrap">
-    <table>{children}</table>
+    <table {...props}>{children}</table>
   </div>
 )
 
@@ -19,10 +33,14 @@ function headingComponent(
   Tag: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6',
   slug: (text: string) => string,
 ): Components['h1'] {
-  return ({ children }) => {
+  return ({ children, node: _node, ...props }) => {
     const text = plainTextFromNode(children).trim()
-    const id = text ? slug(text) : ''
-    return id ? <Tag id={id}>{children}</Tag> : <Tag>{children}</Tag>
+    const id = text ? slug(text) : props.id
+    return (
+      <Tag {...props} id={id}>
+        {children}
+      </Tag>
+    )
   }
 }
 
@@ -52,7 +70,7 @@ interface Props {
 
 function onPreviewClick(e: MouseEvent<HTMLDivElement>) {
   const a = (e.target as HTMLElement | null)?.closest?.('a')
-  if (!a || !(a instanceof HTMLAnchorElement)) return
+  if (!(a instanceof HTMLAnchorElement)) return
   const href = a.getAttribute('href')
   if (!href || !href.startsWith('#') || href === '#') return
   e.preventDefault()
@@ -66,7 +84,12 @@ export const MarkdownPreview = memo(function MarkdownPreview({ content }: Props)
   const components = useMemo(() => buildComponents(createHeadingSlugger()), [content])
   return (
     <div className="md-preview-root" onClick={onPreviewClick}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={urlTransform} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={rehypePlugins}
+        urlTransform={urlTransform}
+        components={components}
+      >
         {content}
       </ReactMarkdown>
     </div>

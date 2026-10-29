@@ -21,7 +21,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 - **Drag & drop / shell open**: drop files or folders onto the window; OS “Open with PinkHunkReader” uses the same open placement and parent-folder settings as in-app Open
 - **Session restore**: after quitting the last window, reopen its tabs/roots on next launch (not every window you closed earlier); window size and position are remembered
 - **Auto-save**: optional interval auto-save for editable tabs (Settings → General)
-- **Markdown**: side-by-side edit + live preview (GFM)
+- **Markdown**: side-by-side edit + live preview (GFM; inline HTML allowed, e.g. centered headings; unsafe tags stripped)
 - **Text / code**: Monaco editor with basic language highlighting; JSON format/minify via `Ctrl+Shift+M` / `Cmd+Shift+M`
 - **PDF**: page-by-page preview (PDF.js)
 - **Word**: read-only `.docx` preview (HTML via mammoth), with outline when headings are available; legacy `.doc` is not previewed — save as `.docx` and reopen
