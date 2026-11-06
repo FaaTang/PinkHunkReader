@@ -3,6 +3,7 @@ import { MonacoEditor } from '../components/MonacoEditor'
 import { GoToButton } from '../components/GoToButton'
 import { ensureMonaco, isMonacoReady, whenMonacoReady } from '../monaco'
 import { useRegisterGoTo } from '../settings/AppSettingsContext'
+import { getActiveTextEditor, setActiveTextEditor } from '../utils/activeTextEditor'
 import { langFromPath } from '../utils/lang'
 import './viewers.css'
 
@@ -38,10 +39,15 @@ export function TextView({
   onChange,
 }: Props) {
   const editorRef = useRef<any>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const contentRef = useRef(content)
+  const onChangeRef = useRef(onChange)
   const [monacoReady, setMonacoReady] = useState(isMonacoReady())
   const lineCount = useMemo(() => Math.max(1, content.split(/\r?\n/).length), [content])
   const language = languageHint || langFromPath(path, name)
   const useFastEditor = autoFocus && editable && !monacoReady
+  contentRef.current = content
+  onChangeRef.current = onChange
 
   useEffect(() => {
     void ensureMonaco().catch(() => {})
@@ -68,6 +74,79 @@ export function TextView({
         }
       : null,
   )
+
+  useEffect(() => {
+    if (!active || !editable) return
+    const handle = {
+      getValue: () => {
+        const ed = editorRef.current
+        if (ed?.getValue) return ed.getValue()
+        if (textareaRef.current) return textareaRef.current.value
+        return contentRef.current
+      },
+      getSelection: () => {
+        const ed = editorRef.current
+        const model = ed?.getModel?.()
+        const sel = ed?.getSelection?.()
+        if (model && sel && !sel.isEmpty?.()) {
+          const startOffset = model.getOffsetAt(sel.getStartPosition())
+          const endOffset = model.getOffsetAt(sel.getEndPosition())
+          if (startOffset === endOffset) return null
+          return {
+            startOffset,
+            endOffset,
+            text: model.getValueInRange(sel),
+          }
+        }
+        const ta = textareaRef.current
+        if (ta && ta.selectionStart !== ta.selectionEnd) {
+          return {
+            startOffset: ta.selectionStart,
+            endOffset: ta.selectionEnd,
+            text: ta.value.slice(ta.selectionStart, ta.selectionEnd),
+          }
+        }
+        return null
+      },
+      replaceRange: (startOffset: number, endOffset: number, text: string) => {
+        const ed = editorRef.current
+        const model = ed?.getModel?.()
+        if (model && ed?.executeEdits) {
+          const start = model.getPositionAt(startOffset)
+          const end = model.getPositionAt(endOffset)
+          ed.executeEdits('format-json', [{
+            range: {
+              startLineNumber: start.lineNumber,
+              startColumn: start.column,
+              endLineNumber: end.lineNumber,
+              endColumn: end.column,
+            },
+            text,
+          }])
+          const next = ed.getValue?.() ?? contentRef.current
+          onChangeRef.current(next)
+          return next
+        }
+        const base = textareaRef.current?.value ?? contentRef.current
+        const next = base.slice(0, startOffset) + text + base.slice(endOffset)
+        onChangeRef.current(next)
+        const ta = textareaRef.current
+        if (ta) {
+          const caret = startOffset + text.length
+          window.requestAnimationFrame(() => {
+            ta.focus()
+            ta.setSelectionRange(caret, caret)
+          })
+        }
+        return next
+      },
+    }
+    setActiveTextEditor(handle)
+    return () => {
+      // Other mounted tabs must not wipe a newer active registration.
+      if (getActiveTextEditor() === handle) setActiveTextEditor(null)
+    }
+  }, [active, editable])
 
   useEffect(() => {
     if (!active) return
@@ -106,6 +185,7 @@ export function TextView({
       <div className="editor-wrap" style={{ flex: 1 }}>
         {useFastEditor ? (
           <textarea
+            ref={textareaRef}
             className="editor-fast-input"
             value={content}
             autoFocus

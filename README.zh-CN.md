@@ -21,7 +21,7 @@ PinkHunkReader 基于 **Wails (Go)** 与 **React**，用于本地文件夹浏览
 - **会话恢复**：关掉**最后一个**窗口后，下次启动只恢复该窗口的标签/工作区（含未保存内容）；此前在多窗口时主动关掉的其它窗口不会再打开；窗口位置与尺寸也会记住
 - **自动保存**：Settings → General 可开启，按间隔自动保存可编辑标签
 - **Markdown**：左右分栏编辑 + 实时预览（GFM；支持内嵌 HTML，如居中标题，并过滤危险标签）
-- **文本 / 代码**：Monaco 编辑器，常见后缀高亮；JSON 支持 `Ctrl+Shift+M` / `Cmd+Shift+M` 格式化与压缩切换
+- **文本 / 代码**：Monaco 编辑器，常见后缀高亮；JSON 支持 `Ctrl+Alt+L` / `Cmd+Option+L` 格式化与压缩切换（有选区时只处理选中内容，否则处理全文）
 - **PDF**：按页预览（PDF.js）
 - **Word**：`.docx` 只读预览（HTML）；有标题时可显示大纲。旧版 `.doc` 不预览，请另存为 `.docx` 后再打开
 - **Excel**：`.xlsx` / `.xls` 只读表格预览（列宽拖拽、双击列标自适应、单击单元格复制）
@@ -95,7 +95,7 @@ frontend/   React：FileTree + Tabs + ViewerHost
 | `Ctrl+Shift+D` / macOS `Cmd+Shift+D` | 打开文件夹 |
 | `Ctrl+S` / macOS `Cmd+S` | 保存当前可编辑标签 |
 | `Ctrl+,` / macOS `Cmd+,` | 显示 / 隐藏资源管理器 |
-| `Ctrl+Shift+M` / macOS `Cmd+Shift+M` | JSON 格式化 / 压缩切换 |
+| `Ctrl+Alt+L` / macOS `Cmd+Option+L` | JSON 格式化 / 压缩（选区或全文） |
 | `Ctrl+G` / macOS `Cmd+G` | 跳页（PDF）或跳行（文本 / MD） |
 | `F11` | 全屏切换 |
 

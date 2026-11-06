@@ -33,6 +33,7 @@ import {
 } from './settings/openPlacement'
 import { eventMatchesShortcut, formatShortcut } from './settings/shortcuts'
 import type { FileInfo, OpenTab } from './types'
+import { getActiveTextEditor } from './utils/activeTextEditor'
 import { isJsonTab, toggleJsonFormat } from './utils/jsonFormat'
 import {
   folderLabel,
@@ -1306,7 +1307,28 @@ function AppShell() {
   const formatActiveJson = useCallback(() => {
     const tab = activeTab
     if (!tab?.editable || tab.largeMode || !activePath) return
-    const result = toggleJsonFormat(tab.content)
+    const editor = getActiveTextEditor()
+    const selection = editor?.getSelection()
+    if (selection && selection.text.trim()) {
+      const result = toggleJsonFormat(selection.text)
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      const nextContent = editor!.replaceRange(selection.startOffset, selection.endOffset, result.text)
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.path === activePath
+            ? { ...t, content: nextContent, dirty: true, languageHint: 'json' }
+            : t,
+        ),
+      )
+      setStatus(result.mode === 'pretty' ? 'JSON selection formatted' : 'JSON selection compacted')
+      setError('')
+      return
+    }
+    const source = editor?.getValue() ?? tab.content
+    const result = toggleJsonFormat(source)
     if (!result.ok) {
       setError(result.error)
       return

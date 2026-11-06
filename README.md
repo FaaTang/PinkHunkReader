@@ -22,7 +22,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 - **Session restore**: after quitting the last window, reopen its tabs/roots on next launch (not every window you closed earlier); window size and position are remembered
 - **Auto-save**: optional interval auto-save for editable tabs (Settings → General)
 - **Markdown**: side-by-side edit + live preview (GFM; inline HTML allowed, e.g. centered headings; unsafe tags stripped)
-- **Text / code**: Monaco editor with basic language highlighting; JSON format/minify via `Ctrl+Shift+M` / `Cmd+Shift+M`
+- **Text / code**: Monaco editor with basic language highlighting; JSON format/minify via `Ctrl+Alt+L` / `Cmd+Option+L` (formats the selection when text is selected, otherwise the whole buffer)
 - **PDF**: page-by-page preview (PDF.js)
 - **Word**: read-only `.docx` preview (HTML via mammoth), with outline when headings are available; legacy `.doc` is not previewed — save as `.docx` and reopen
 - **Excel**: read-only `.xlsx` / `.xls` grid preview (column resize, double-click header to autofit, click cell to copy)
@@ -96,7 +96,7 @@ Viewer routing is driven by `kind` (`markdown` / `text` / `pdf` / `image` / `exc
 | `Ctrl+Shift+D` / macOS `Cmd+Shift+D` | Open folder |
 | `Ctrl+S` / macOS `Cmd+S` | Save current editable tab |
 | `Ctrl+,` / macOS `Cmd+,` | Show / hide explorer |
-| `Ctrl+Shift+M` / macOS `Cmd+Shift+M` | JSON format / minify toggle |
+| `Ctrl+Alt+L` / macOS `Cmd+Option+L` | JSON format / minify (selection or whole buffer) |
 | `Ctrl+G` / macOS `Cmd+G` | Go to page (PDF) or line (text / Markdown) |
 | `F11` | Toggle full screen |
 
