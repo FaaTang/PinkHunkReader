@@ -3,6 +3,7 @@ import './App.css'
 import './styles/theme.css'
 import logo from './assets/logo.svg'
 import { CloseSaveDialog, type CloseSaveChoice } from './components/CloseSaveDialog'
+import { ConfirmDialog, type ConfirmChoice } from './components/ConfirmDialog'
 import { KeepMissingDialog, type KeepMissingChoice } from './components/KeepMissingDialog'
 import { FileTree } from './components/FileTree'
 import { GoToDialog } from './components/GoToDialog'
@@ -311,6 +312,7 @@ function AppShell() {
     path: string
     canKeep: boolean
   } | null>(null)
+  const [removeAllPrompt, setRemoveAllPrompt] = useState(false)
 
   /** Per-tab paged save hooks (tabs stay mounted while hidden). */
   const pagedSaveByPathRef = useRef(new Map<string, () => Promise<void>>())
@@ -324,6 +326,7 @@ function AppShell() {
   const placementResolverRef = useRef<((c: OpenPlacementChoice | 'cancel') => void) | null>(null)
   const parentFolderResolverRef = useRef<((c: OpenParentFolderChoice | 'cancel') => void) | null>(null)
   const missingResolverRef = useRef<((c: KeepMissingChoice) => void) | null>(null)
+  const removeAllResolverRef = useRef<((c: ConfirmChoice) => void) | null>(null)
   const missingPromptedRef = useRef(new Set<string>())
   const missingCheckBusyRef = useRef(false)
   /** Shell/CLI paths captured during launch bootstrap; flushed once openKnownPaths is ready. */
@@ -470,6 +473,13 @@ function AppShell() {
     return new Promise<KeepMissingChoice>((resolve) => {
       missingResolverRef.current = resolve
       setMissingPrompt({ path, canKeep })
+    })
+  }, [])
+
+  const askRemoveAllFolders = useCallback(() => {
+    return new Promise<ConfirmChoice>((resolve) => {
+      removeAllResolverRef.current = resolve
+      setRemoveAllPrompt(true)
     })
   }, [])
 
@@ -1273,6 +1283,8 @@ function AppShell() {
   const removeAllFromWorkspace = useCallback(async () => {
     setError('')
     if (!rootsRef.current.length) return
+    const confirm = await askRemoveAllFolders()
+    if (confirm !== 'confirm') return
     const affected = tabsRef.current.filter((t) => {
       if (t.untitled) return false
       return pathUnderAnyRoot(t.path, rootsRef.current)
@@ -1302,7 +1314,7 @@ function AppShell() {
     } catch (e) {
       setError(String(e))
     }
-  }, [askCloseSave, saveTab])
+  }, [askCloseSave, askRemoveAllFolders, saveTab])
 
   const formatActiveJson = useCallback(() => {
     const tab = activeTab
@@ -1439,6 +1451,13 @@ function AppShell() {
     const resolve = closeResolverRef.current
     closeResolverRef.current = null
     setClosePrompt(null)
+    resolve?.(choice)
+  }, [])
+
+  const handleRemoveAllPrompt = useCallback((choice: ConfirmChoice) => {
+    const resolve = removeAllResolverRef.current
+    removeAllResolverRef.current = null
+    setRemoveAllPrompt(false)
     resolve?.(choice)
   }, [])
 
@@ -1579,7 +1598,7 @@ function AppShell() {
       const typing =
         tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable
 
-      if (closePrompt || placementPrompt || parentFolderPrompt) return
+      if (closePrompt || placementPrompt || parentFolderPrompt || removeAllPrompt) return
 
       if (goToOpen || settingsOpen) {
         if (eventMatchesShortcut(e, shortcuts.exitFullscreen) && fullscreen && !typing) {
@@ -1685,6 +1704,7 @@ function AppShell() {
     closePrompt,
     placementPrompt,
     parentFolderPrompt,
+    removeAllPrompt,
     setExplorerOpen,
   ])
 
@@ -1939,6 +1959,12 @@ function AppShell() {
         fileName={closePrompt?.name ?? ''}
         remaining={closePrompt?.remaining ?? 0}
         onChoice={handleClosePrompt}
+      />
+      <ConfirmDialog
+        open={removeAllPrompt}
+        title="Remove all folders?"
+        message="Remove every folder from the Explorer workspace? Open tabs under those folders will be closed."
+        onChoice={handleRemoveAllPrompt}
       />
       <KeepMissingDialog
         open={Boolean(missingPrompt)}
