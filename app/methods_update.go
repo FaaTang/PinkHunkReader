@@ -192,6 +192,12 @@ type localizedUpdateError struct {
 }
 
 func (e localizedUpdateError) Error() string {
+	if status, ok := e.params["status"]; ok {
+		return fmt.Sprintf("%s (HTTP %v)", e.key, status)
+	}
+	if detail, ok := e.params["detail"]; ok {
+		return fmt.Sprintf("%s: %v", e.key, detail)
+	}
 	return e.key
 }
 
