@@ -1,6 +1,7 @@
 ﻿package app
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	stdRuntime "runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/FaaTang/PinkHunkReader/define"
@@ -36,9 +38,85 @@ var (
 )
 
 type updateState struct {
-	lastCheck   *UpdateInfo
-	downloading bool
-	staged      *stagedUpdate
+	lastCheck      *UpdateInfo
+	downloading    bool
+	staged         *stagedUpdate
+	control        *downloadController
+	lastDownloaded int64
+	lastTotal      int64
+}
+
+/** Controls pause / cancel for an in-flight update download. */
+type downloadController struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	mu     sync.Mutex
+	cond   *sync.Cond
+	paused bool
+}
+
+func newDownloadController(parent context.Context) *downloadController {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	c := &downloadController{ctx: ctx, cancel: cancel}
+	c.cond = sync.NewCond(&c.mu)
+	return c
+}
+
+func (c *downloadController) Pause() {
+	c.mu.Lock()
+	c.paused = true
+	c.mu.Unlock()
+}
+
+func (c *downloadController) Resume() {
+	c.mu.Lock()
+	c.paused = false
+	c.cond.Broadcast()
+	c.mu.Unlock()
+}
+
+func (c *downloadController) Cancel() {
+	c.cancel()
+	c.mu.Lock()
+	c.paused = false
+	c.cond.Broadcast()
+	c.mu.Unlock()
+}
+
+func (c *downloadController) WaitIfPaused() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for c.paused {
+		if err := c.ctx.Err(); err != nil {
+			return err
+		}
+		c.cond.Wait()
+	}
+	return c.ctx.Err()
+}
+
+func (c *downloadController) isPaused() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.paused
+}
+
+/** Blocks reads while paused; cancel aborts via context on the HTTP request. */
+type gatedReader struct {
+	r    io.Reader
+	ctrl *downloadController
+}
+
+func (g *gatedReader) Read(p []byte) (int, error) {
+	if g.ctrl != nil {
+		if err := g.ctrl.WaitIfPaused(); err != nil {
+			return 0, err
+		}
+	}
+	return g.r.Read(p)
 }
 
 type UpdateInfo struct {
@@ -225,18 +303,68 @@ func (a *App) DownloadUpdate() define.QueryResult {
 		a.updateMu.Unlock()
 		return define.QueryResult{Success: true, Message: updateText("app.update.backend.message.package_already_downloaded", nil), Data: buildUpdateDownloadResult(*info, staged)}
 	}
+	ctrl := newDownloadController(a.ctx)
 	a.updateState.staged = nil
 	a.updateState.downloading = true
+	a.updateState.control = ctrl
+	a.updateState.lastDownloaded = 0
+	a.updateState.lastTotal = info.AssetSize
 	a.updateMu.Unlock()
 
 	a.emitUpdateDownloadProgress("start", 0, info.AssetSize, "")
-	result := a.downloadAndStageUpdate(*info)
+	result := a.downloadAndStageUpdate(*info, ctrl)
 
 	a.updateMu.Lock()
 	a.updateState.downloading = false
+	a.updateState.control = nil
 	a.updateMu.Unlock()
 
 	return result
+}
+
+func (a *App) PauseUpdateDownload() define.QueryResult {
+	a.updateMu.Lock()
+	ctrl := a.updateState.control
+	downloaded := a.updateState.lastDownloaded
+	total := a.updateState.lastTotal
+	downloading := a.updateState.downloading
+	a.updateMu.Unlock()
+	if !downloading || ctrl == nil {
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.no_download_in_progress", nil)}
+	}
+	ctrl.Pause()
+	a.emitUpdateDownloadProgress("paused", downloaded, total, "")
+	return define.QueryResult{Success: true, Message: updateText("app.update.backend.message.download_paused", nil)}
+}
+
+func (a *App) ResumeUpdateDownload() define.QueryResult {
+	a.updateMu.Lock()
+	ctrl := a.updateState.control
+	downloaded := a.updateState.lastDownloaded
+	total := a.updateState.lastTotal
+	downloading := a.updateState.downloading
+	a.updateMu.Unlock()
+	if !downloading || ctrl == nil {
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.no_download_in_progress", nil)}
+	}
+	ctrl.Resume()
+	a.emitUpdateDownloadProgress("downloading", downloaded, total, "")
+	return define.QueryResult{Success: true, Message: updateText("app.update.backend.message.download_resumed", nil)}
+}
+
+func (a *App) CancelUpdateDownload() define.QueryResult {
+	a.updateMu.Lock()
+	ctrl := a.updateState.control
+	downloaded := a.updateState.lastDownloaded
+	total := a.updateState.lastTotal
+	downloading := a.updateState.downloading
+	a.updateMu.Unlock()
+	if !downloading || ctrl == nil {
+		return define.QueryResult{Success: false, Message: updateText("app.update.backend.message.no_download_in_progress", nil)}
+	}
+	ctrl.Cancel()
+	a.emitUpdateDownloadProgress("cancelled", downloaded, total, updateText("app.update.backend.message.download_cancelled", nil))
+	return define.QueryResult{Success: true, Message: updateText("app.update.backend.message.download_cancelled", nil)}
 }
 
 func (a *App) InstallUpdateAndRestart() define.QueryResult {
@@ -340,7 +468,7 @@ func (a *App) openDownloadedUpdatePackage(revealFile bool) define.QueryResult {
 	}
 }
 
-func (a *App) downloadAndStageUpdate(info UpdateInfo) define.QueryResult {
+func (a *App) downloadAndStageUpdate(info UpdateInfo, ctrl *downloadController) define.QueryResult {
 	workspaceDir := strings.TrimSpace(resolveUpdateWorkspaceDir(info.LatestVersion))
 	if workspaceDir == "" {
 		message := updateText("app.update.backend.message.app_directory_unresolved_download", nil)
@@ -377,16 +505,30 @@ func (a *App) downloadAndStageUpdate(info UpdateInfo) define.QueryResult {
 
 	// macOS 下载包放在桌面版本目录根级；其他平台继续放在 staging 目录。
 	assetPath := resolveUpdateAssetPath(workspaceDir, stagedDir, info.AssetName)
-	actualHash, err := downloadFileWithHash(info.AssetURL, assetPath, func(downloaded, total int64) {
+	actualHash, err := downloadFileWithHash(info.AssetURL, assetPath, ctrl, func(downloaded, total int64) {
 		reportTotal := total
 		if reportTotal <= 0 {
 			reportTotal = info.AssetSize
 		}
-		a.emitUpdateDownloadProgress("downloading", downloaded, reportTotal, "")
+		a.updateMu.Lock()
+		a.updateState.lastDownloaded = downloaded
+		a.updateState.lastTotal = reportTotal
+		paused := a.updateState.control != nil && a.updateState.control.isPaused()
+		a.updateMu.Unlock()
+		status := "downloading"
+		if paused {
+			status = "paused"
+		}
+		a.emitUpdateDownloadProgress(status, downloaded, reportTotal, "")
 	})
 	if err != nil {
 		_ = os.Remove(assetPath)
 		_ = os.RemoveAll(stagedDir)
+		if errors.Is(err, context.Canceled) {
+			message := updateText("app.update.backend.message.download_cancelled", nil)
+			a.emitUpdateDownloadProgress("cancelled", 0, info.AssetSize, message)
+			return define.QueryResult{Success: false, Message: message}
+		}
 		message := a.localizedUpdateError(err)
 		a.emitUpdateDownloadProgress("error", 0, info.AssetSize, message)
 		return define.QueryResult{Success: false, Message: message}
@@ -708,16 +850,18 @@ func (w *downloadProgressWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func downloadFileWithHash(url, filePath string, onProgress func(downloaded, total int64)) (string, error) {
-	return downloadFileWithHashWithTimeout(url, filePath, onProgress, 10*time.Minute)
+func downloadFileWithHash(url, filePath string, ctrl *downloadController, onProgress func(downloaded, total int64)) (string, error) {
+	// No overall client timeout: pause can last longer than a fixed deadline; cancel uses context.
+	return downloadFileWithHashWithTimeout(url, filePath, ctrl, onProgress, 0)
 }
 
-func downloadFileWithHashWithTimeout(url, filePath string, onProgress func(downloaded, total int64), timeout time.Duration) (string, error) {
-	if timeout <= 0 {
-		timeout = 10 * time.Minute
-	}
+func downloadFileWithHashWithTimeout(url, filePath string, ctrl *downloadController, onProgress func(downloaded, total int64), timeout time.Duration) (string, error) {
 	client := newUpdateHTTPClient(timeout)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	reqCtx := context.Background()
+	if ctrl != nil {
+		reqCtx = ctrl.ctx
+	}
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -728,6 +872,9 @@ func downloadFileWithHashWithTimeout(url, filePath string, onProgress func(downl
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return "", context.Canceled
+		}
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -769,8 +916,15 @@ func downloadFileWithHashWithTimeout(url, filePath string, onProgress func(downl
 	if onProgress != nil {
 		onProgress(0, total)
 	}
-	if _, err := io.Copy(io.MultiWriter(writers...), resp.Body); err != nil {
+	body := io.Reader(resp.Body)
+	if ctrl != nil {
+		body = &gatedReader{r: resp.Body, ctrl: ctrl}
+	}
+	if _, err := io.Copy(io.MultiWriter(writers...), body); err != nil {
 		out.Close()
+		if errors.Is(err, context.Canceled) || (ctrl != nil && errors.Is(ctrl.ctx.Err(), context.Canceled)) {
+			return "", context.Canceled
+		}
 		return "", err
 	}
 	if onProgress != nil {

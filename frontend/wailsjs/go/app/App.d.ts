@@ -15,9 +15,15 @@ export function CountLines(arg1:string):Promise<number>;
 
 export function DetectKind(arg1:string):Promise<string>;
 
+export function CancelUpdateDownload():Promise<define.QueryResult>;
+
 export function DownloadUpdate():Promise<define.QueryResult>;
 
 export function FileExists(arg1:string):Promise<boolean>;
+
+export function PauseUpdateDownload():Promise<define.QueryResult>;
+
+export function ResumeUpdateDownload():Promise<define.QueryResult>;
 
 export function GetAppInfo():Promise<define.QueryResult>;
 

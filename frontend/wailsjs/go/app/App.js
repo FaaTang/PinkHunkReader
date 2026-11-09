@@ -26,12 +26,24 @@ export function DetectKind(arg1) {
   return window['go']['app']['App']['DetectKind'](arg1);
 }
 
+export function CancelUpdateDownload() {
+  return window['go']['app']['App']['CancelUpdateDownload']();
+}
+
 export function DownloadUpdate() {
   return window['go']['app']['App']['DownloadUpdate']();
 }
 
 export function FileExists(arg1) {
   return window['go']['app']['App']['FileExists'](arg1);
+}
+
+export function PauseUpdateDownload() {
+  return window['go']['app']['App']['PauseUpdateDownload']();
+}
+
+export function ResumeUpdateDownload() {
+  return window['go']['app']['App']['ResumeUpdateDownload']();
 }
 
 export function GetAppInfo() {

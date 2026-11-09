@@ -824,13 +824,18 @@ export function SettingsModal({ update }: Props) {
                         ? 'Show update'
                         : update.progress.status === 'error'
                           ? 'Show download error'
-                          : `Show download progress (${Math.round(update.progress.percent)}%)`}
+                          : update.progress.status === 'cancelled'
+                            ? 'Show cancelled download'
+                            : update.progress.status === 'paused'
+                              ? `Show paused download (${Math.round(update.progress.percent)}%)`
+                              : `Show download progress (${Math.round(update.progress.percent)}%)`}
                     </button>
                   ) : null}
                   {update?.lastUpdate?.hasUpdate
                     && !update.canInstall
                     && update.progress.status !== 'start'
-                    && update.progress.status !== 'downloading' ? (
+                    && update.progress.status !== 'downloading'
+                    && update.progress.status !== 'paused' ? (
                     <button
                       type="button"
                       className="toolbar-btn primary"

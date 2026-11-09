@@ -19,6 +19,18 @@ func updateText(key string, params map[string]any) string {
 		return fmt.Sprintf("Update available: %s", pick("version"))
 	case "app.update.backend.message.download_in_progress":
 		return "A download is already in progress"
+	case "app.update.backend.message.no_download_in_progress":
+		return "No download is in progress"
+	case "app.update.backend.message.download_paused":
+		return "Download paused"
+	case "app.update.backend.message.download_resumed":
+		return "Download resumed"
+	case "app.update.backend.message.download_cancelled":
+		return "Download cancelled"
+	case "app.update.backend.error.package_download_http_failed":
+		return fmt.Sprintf("Package download failed (HTTP %s)", pick("status"))
+	case "app.update.backend.error.package_file_busy":
+		return fmt.Sprintf("Could not create package file: %s", pick("detail"))
 	case "app.update.backend.message.check_first":
 		return "Check for updates first"
 	case "app.update.backend.message.no_update_package":

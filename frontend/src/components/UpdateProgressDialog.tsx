@@ -12,6 +12,9 @@ interface Props {
   canInstall: boolean
   onHide: () => void
   onInstall: () => void
+  onPause?: () => void
+  onResume?: () => void
+  onCancel?: () => void
 }
 
 export function UpdateProgressDialog({
@@ -26,16 +29,26 @@ export function UpdateProgressDialog({
   canInstall,
   onHide,
   onInstall,
+  onPause,
+  onResume,
+  onCancel,
 }: Props) {
   if (!open) return null
+  const active = status === 'downloading' || status === 'start'
+  const paused = status === 'paused'
+  const inFlight = active || paused
   const label =
     status === 'done'
       ? 'Download complete'
       : status === 'error'
         ? 'Download failed'
-        : status === 'downloading' || status === 'start'
-          ? 'Downloading update…'
-          : 'Update'
+        : status === 'cancelled'
+          ? 'Download cancelled'
+          : paused
+            ? 'Download paused'
+            : active
+              ? 'Downloading update…'
+              : 'Update'
   return (
     <div className="goto-backdrop" onMouseDown={onHide}>
       <div
@@ -54,7 +67,7 @@ export function UpdateProgressDialog({
           <div className="update-progress-bar" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
         </div>
         {message ? <p className="settings-error" style={{ marginTop: 10 }}>{message}</p> : null}
-        <div className="goto-actions" style={{ marginTop: 14 }}>
+        <div className="goto-actions" style={{ marginTop: 14, flexWrap: 'wrap' }}>
           <button
             type="button"
             className="toolbar-btn"
@@ -63,8 +76,23 @@ export function UpdateProgressDialog({
           >
             Hide
           </button>
+          {inFlight && onCancel ? (
+            <button type="button" className="toolbar-btn" onClick={onCancel}>
+              Cancel
+            </button>
+          ) : null}
           <span style={{ flex: 1 }} />
-          {(status === 'done' || canInstall) ? (
+          {active && onPause ? (
+            <button type="button" className="toolbar-btn" onClick={onPause}>
+              Pause
+            </button>
+          ) : null}
+          {paused && onResume ? (
+            <button type="button" className="toolbar-btn primary" onClick={onResume}>
+              Resume
+            </button>
+          ) : null}
+          {(status === 'done' || canInstall) && !inFlight ? (
             <button type="button" className="toolbar-btn primary" onClick={onInstall}>
               Install and restart
             </button>

@@ -313,6 +313,7 @@ function AppShell() {
     canKeep: boolean
   } | null>(null)
   const [removeAllPrompt, setRemoveAllPrompt] = useState(false)
+  const [cancelDownloadPrompt, setCancelDownloadPrompt] = useState(false)
 
   /** Per-tab paged save hooks (tabs stay mounted while hidden). */
   const pagedSaveByPathRef = useRef(new Map<string, () => Promise<void>>())
@@ -1598,7 +1599,7 @@ function AppShell() {
       const typing =
         tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable
 
-      if (closePrompt || placementPrompt || parentFolderPrompt || removeAllPrompt) return
+      if (closePrompt || placementPrompt || parentFolderPrompt || removeAllPrompt || cancelDownloadPrompt) return
 
       if (goToOpen || settingsOpen) {
         if (eventMatchesShortcut(e, shortcuts.exitFullscreen) && fullscreen && !typing) {
@@ -1705,6 +1706,7 @@ function AppShell() {
     placementPrompt,
     parentFolderPrompt,
     removeAllPrompt,
+    cancelDownloadPrompt,
     setExplorerOpen,
   ])
 
@@ -1792,7 +1794,11 @@ function AppShell() {
               ? 'Update ready'
               : update.progress.status === 'error'
                 ? 'Download failed'
-                : `Downloading… ${Math.round(update.progress.percent)}%`}
+                : update.progress.status === 'cancelled'
+                  ? 'Download cancelled'
+                  : update.progress.status === 'paused'
+                    ? `Paused… ${Math.round(update.progress.percent)}%`
+                    : `Downloading… ${Math.round(update.progress.percent)}%`}
           </button>
         ) : null}
         <div className="root-path" title={roots.join('\n')}>{rootsSummary}</div>
@@ -1966,6 +1972,15 @@ function AppShell() {
         message="Remove every folder from the Explorer workspace? Open tabs under those folders will be closed."
         onChoice={handleRemoveAllPrompt}
       />
+      <ConfirmDialog
+        open={cancelDownloadPrompt}
+        title="Cancel download?"
+        message="Stop downloading this update? You can download again later from Settings → About."
+        onChoice={(choice) => {
+          setCancelDownloadPrompt(false)
+          if (choice === 'confirm') void update.cancelDownload()
+        }}
+      />
       <KeepMissingDialog
         open={Boolean(missingPrompt)}
         filePath={missingPrompt?.path ?? ''}
@@ -1999,6 +2014,9 @@ function AppShell() {
         canInstall={update.canInstall}
         onHide={update.hideProgress}
         onInstall={() => void update.installUpdate()}
+        onPause={() => void update.pauseDownload()}
+        onResume={() => void update.resumeDownload()}
+        onCancel={() => setCancelDownloadPrompt(true)}
       />
       <GoToDialog />
     </div>

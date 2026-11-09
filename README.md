@@ -31,7 +31,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 - **Missing source**: if an open file is deleted or renamed on disk, editable text/Markdown (non-paged) asks whether to keep the buffer in the editor (Save recreates the file); paged/binary tabs only notify that the source is gone. Orphan tabs skip auto-save until you Save manually.
 - **Path sandbox**: all IO stays under the opened root
 - **Recent files & folders**: listed under Open Recent; count configurable in Settings → General (default 10)
-- **Proxy & updates**: global proxy in Settings → Proxy; update check from About / preferences
+- **Proxy & updates**: global proxy in Settings → Proxy; update check from About / preferences; download progress supports Pause / Resume / Cancel (Cancel asks for confirmation)
 
 ## CI / Releases
 

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import {
+  CancelUpdateDownload,
   CheckForUpdates,
   CheckForUpdatesSilently,
   DownloadUpdate,
   GetAppInfo,
   InstallUpdateAndRestart,
   OpenDownloadedUpdatePackage,
+  PauseUpdateDownload,
+  ResumeUpdateDownload,
 } from '../../wailsjs/go/app/App'
 import {
   loadUpdatePreferences,
@@ -48,7 +51,7 @@ type QueryResult = {
 type DownloadProgress = {
   open: boolean
   version: string
-  status: 'idle' | 'start' | 'downloading' | 'done' | 'error'
+  status: 'idle' | 'start' | 'downloading' | 'paused' | 'done' | 'error' | 'cancelled'
   percent: number
   downloaded: number
   total: number
@@ -186,8 +189,16 @@ export function useAppUpdateManager(opts?: {
     try {
       const res = (await DownloadUpdate()) as QueryResult
       if (!res?.success) {
-        setError(res?.message || 'Download failed')
-        setProgress((p) => ({ ...p, open: true, status: 'error', message: res?.message || 'Download failed' }))
+        const cancelled =
+          /cancel/i.test(res?.message || '')
+          || false
+        setError(cancelled ? '' : (res?.message || 'Download failed'))
+        setProgress((p) => ({
+          ...p,
+          open: true,
+          status: cancelled || p.status === 'cancelled' ? 'cancelled' : 'error',
+          message: res?.message || (cancelled ? 'Download cancelled' : 'Download failed'),
+        }))
         return
       }
       const data = (res.data || {}) as { downloadPath?: string; info?: UpdateInfo }
@@ -198,6 +209,7 @@ export function useAppUpdateManager(opts?: {
         percent: 100,
         downloaded: p.total || lastUpdate.assetSize || 0,
         open: true,
+        message: '',
       }))
       applyUpdateInfo({
         ...lastUpdate,
@@ -212,6 +224,50 @@ export function useAppUpdateManager(opts?: {
       setBusy(false)
     }
   }, [applyUpdateInfo, lastUpdate])
+
+  const pauseDownload = useCallback(async () => {
+    try {
+      const res = (await PauseUpdateDownload()) as QueryResult
+      if (!res?.success) {
+        setError(res?.message || 'Pause failed')
+        return
+      }
+      setProgress((p) => ({ ...p, open: true, status: 'paused' }))
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [])
+
+  const resumeDownload = useCallback(async () => {
+    try {
+      const res = (await ResumeUpdateDownload()) as QueryResult
+      if (!res?.success) {
+        setError(res?.message || 'Resume failed')
+        return
+      }
+      setProgress((p) => ({ ...p, open: true, status: 'downloading' }))
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [])
+
+  const cancelDownload = useCallback(async () => {
+    try {
+      const res = (await CancelUpdateDownload()) as QueryResult
+      if (!res?.success) {
+        setError(res?.message || 'Cancel failed')
+        return
+      }
+      setProgress((p) => ({
+        ...p,
+        open: true,
+        status: 'cancelled',
+        message: res?.message || 'Download cancelled',
+      }))
+    } catch (e) {
+      setError(String(e))
+    }
+  }, [])
 
   const installUpdate = useCallback(async () => {
     setBusy(true)
@@ -277,7 +333,7 @@ export function useAppUpdateManager(opts?: {
     }) => {
       setProgress((prev) => {
         const status = (payload?.status as DownloadProgress['status']) || prev.status
-        const forceOpen = status === 'done' || status === 'error'
+        const forceOpen = status === 'done' || status === 'error' || status === 'cancelled'
         return {
           ...prev,
           // Respect Hide while downloading; reopen only for terminal states.
@@ -286,7 +342,7 @@ export function useAppUpdateManager(opts?: {
           percent: typeof payload?.percent === 'number' ? payload.percent : prev.percent,
           downloaded: typeof payload?.downloaded === 'number' ? payload.downloaded : prev.downloaded,
           total: typeof payload?.total === 'number' && payload.total > 0 ? payload.total : prev.total,
-          message: payload?.message || prev.message,
+          message: payload?.message || (status === 'cancelled' ? 'Download cancelled' : prev.message),
         }
       })
     })
@@ -308,6 +364,9 @@ export function useAppUpdateManager(opts?: {
     refreshAppInfo,
     checkForUpdates,
     downloadUpdate,
+    pauseDownload,
+    resumeDownload,
+    cancelDownload,
     installUpdate,
     openDownloadedPackage,
     skipThisVersion,
