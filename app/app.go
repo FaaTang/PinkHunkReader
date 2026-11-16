@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/FaaTang/PinkHunkReader/define"
 	"github.com/FaaTang/PinkHunkReader/fsx"
@@ -23,6 +24,9 @@ type App struct {
 
 	updateMu    sync.Mutex
 	updateState updateState
+
+	fileWatchMu sync.Mutex
+	fileWatch   *openFileWatcher
 
 	windowID string
 	launch   launchOptions
@@ -51,6 +55,7 @@ func (a *App) Startup(ctx context.Context) {
 	clearBootClaim()
 	a.syncShellIntegrationOnStartup()
 	a.startShellPendingWatcher()
+	a.startOpenFileWatcher()
 	// Restore user geometry when present; otherwise first-open dynamic size + center.
 	a.applyStartupWindowGeometry(ctx)
 }
@@ -78,6 +83,7 @@ func (a *App) BeforeClose(ctx context.Context) (prevent bool) {
 // Closing the last window keeps the session (MarkWindowDead) so only that last
 // window's tabs/roots restore on relaunch.
 func (a *App) ConfirmQuit() {
+	a.stopOpenFileWatcher()
 	_ = a.finalizeWindowOnQuit(a.windowID)
 	a.quitMu.Lock()
 	a.quitConfirmed = true
@@ -313,6 +319,73 @@ func (a *App) FileExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+// FindLikelyRenamedFile is a weak fallback when the directory watcher missed a rename
+// (e.g. app was unfocused). Prefers same size, then newest mtime. Prefer SyncWatchedFiles
+// + app:file-renamed for accurate same-directory renames.
+func (a *App) FindLikelyRenamedFile(oldPath string, expectedSize int64) (string, error) {
+	oldPath = strings.TrimSpace(oldPath)
+	if oldPath == "" {
+		return "", fmt.Errorf("path is empty")
+	}
+	if _, err := os.Stat(oldPath); err == nil {
+		return "", nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	dir := filepath.Dir(oldPath)
+	oldBase := filepath.Base(oldPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	type candidate struct {
+		path    string
+		size    int64
+		modTime time.Time
+	}
+	var matches []candidate
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.EqualFold(name, oldBase) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		size := info.Size()
+		if expectedSize > 0 && size != expectedSize {
+			continue
+		}
+		matches = append(matches, candidate{
+			path:    filepath.Join(dir, name),
+			size:    size,
+			modTime: info.ModTime(),
+		})
+	}
+	if len(matches) == 0 {
+		return "", nil
+	}
+	// Exact size matches win; among them pick the newest. If expectedSize was 0,
+	// only accept a single sibling file to avoid guessing wrongly.
+	if expectedSize <= 0 {
+		if len(matches) != 1 {
+			return "", nil
+		}
+		return matches[0].path, nil
+	}
+	best := matches[0]
+	for _, m := range matches[1:] {
+		if m.modTime.After(best.modTime) {
+			best = m
+		}
+	}
+	return best.path, nil
 }
 
 // ReadText loads a whole text file (small / non-largeMode).

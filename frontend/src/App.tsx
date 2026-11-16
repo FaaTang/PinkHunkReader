@@ -5,6 +5,7 @@ import logo from './assets/logo.svg'
 import { CloseSaveDialog, type CloseSaveChoice } from './components/CloseSaveDialog'
 import { ConfirmDialog, type ConfirmChoice } from './components/ConfirmDialog'
 import { KeepMissingDialog, type KeepMissingChoice } from './components/KeepMissingDialog'
+import { ReloadRenamedDialog, type ReloadRenamedChoice } from './components/ReloadRenamedDialog'
 import { FileTree } from './components/FileTree'
 import { GoToDialog } from './components/GoToDialog'
 import { OpenMenu } from './components/OpenMenu'
@@ -52,6 +53,7 @@ import {
   AddRoot,
   ConfirmQuit,
   FileExists,
+  FindLikelyRenamedFile,
   GetLaunchInfo,
   GetOpenPlacementPrefs,
   GetRoots,
@@ -69,6 +71,7 @@ import {
   SpawnNewWindow,
   SpawnRestoredWindows,
   StatFile,
+  SyncWatchedFiles,
   WriteText,
 } from '../wailsjs/go/app/App'
 import { define } from '../wailsjs/go/models'
@@ -312,6 +315,10 @@ function AppShell() {
     path: string
     canKeep: boolean
   } | null>(null)
+  const [renamedPrompt, setRenamedPrompt] = useState<{
+    oldPath: string
+    newPath: string
+  } | null>(null)
   const [removeAllPrompt, setRemoveAllPrompt] = useState(false)
   const [cancelDownloadPrompt, setCancelDownloadPrompt] = useState(false)
 
@@ -327,6 +334,7 @@ function AppShell() {
   const placementResolverRef = useRef<((c: OpenPlacementChoice | 'cancel') => void) | null>(null)
   const parentFolderResolverRef = useRef<((c: OpenParentFolderChoice | 'cancel') => void) | null>(null)
   const missingResolverRef = useRef<((c: KeepMissingChoice) => void) | null>(null)
+  const renamedResolverRef = useRef<((c: ReloadRenamedChoice) => void) | null>(null)
   const removeAllResolverRef = useRef<((c: ConfirmChoice) => void) | null>(null)
   const missingPromptedRef = useRef(new Set<string>())
   const missingCheckBusyRef = useRef(false)
@@ -474,6 +482,13 @@ function AppShell() {
     return new Promise<KeepMissingChoice>((resolve) => {
       missingResolverRef.current = resolve
       setMissingPrompt({ path, canKeep })
+    })
+  }, [])
+
+  const askReloadRenamed = useCallback((oldPath: string, newPath: string) => {
+    return new Promise<ReloadRenamedChoice>((resolve) => {
+      renamedResolverRef.current = resolve
+      setRenamedPrompt({ oldPath, newPath })
     })
   }, [])
 
@@ -1045,6 +1060,7 @@ function AppShell() {
       || placementResolverRef.current
       || parentFolderResolverRef.current
       || missingResolverRef.current
+      || renamedResolverRef.current
     ) {
       return
     }
@@ -1096,6 +1112,87 @@ function AppShell() {
     })
   }, [])
 
+  const retargetTabAfterRename = useCallback(async (oldPath: string, newPath: string) => {
+    const nextRoots = rootsRef.current.map((r) => (pathsEqual(r, oldPath) ? newPath : r))
+    const rootsChanged = nextRoots.some((r, i) => !pathsEqual(r, rootsRef.current[i]))
+    if (rootsChanged) {
+      await SetRoots(nextRoots)
+      setRoots(nextRoots)
+    }
+    missingPromptedRef.current.delete(oldPath)
+    missingPromptedRef.current.delete(newPath)
+    // Drop the stale tab, then open the new path so content/kind refresh from disk.
+    setTabs((prev) => prev.filter((t) => t.path !== oldPath))
+    if (activePathRef.current && pathsEqual(activePathRef.current, oldPath)) {
+      setActivePath(null)
+    }
+    setTreeRefresh((n) => n + 1)
+    await openFile(newPath)
+    setStatus(`Reloaded as ${folderLabel(newPath)}`)
+    setError('')
+  }, [openFile])
+
+  const promptReloadRenamed = useCallback(async (oldPath: string, newPath: string) => {
+    if (quittingRef.current) return
+    if (
+      closeResolverRef.current
+      || placementResolverRef.current
+      || parentFolderResolverRef.current
+      || missingResolverRef.current
+      || renamedResolverRef.current
+    ) {
+      return
+    }
+    const tab = tabsRef.current.find((t) => pathsEqual(t.path, oldPath))
+    if (!tab || tab.untitled) return
+    if (missingPromptedRef.current.has(oldPath)) return
+    missingPromptedRef.current.add(oldPath)
+
+    const renameChoice = await askReloadRenamed(oldPath, newPath)
+    if (renameChoice === 'reload') {
+      try {
+        await retargetTabAfterRename(oldPath, newPath)
+      } catch (e) {
+        setError(String(e))
+      }
+      return
+    }
+    if (canKeepMissingTab(tab)) {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.path === oldPath ? { ...t, orphan: true, dirty: true } : t,
+        ),
+      )
+      setStatus(`Kept ${tab.name} (renamed on disk)`)
+    } else {
+      removeTab(oldPath)
+      setStatus(`Closed ${tab.name} (renamed on disk)`)
+    }
+  }, [askReloadRenamed, removeTab, retargetTabAfterRename])
+
+  useEffect(() => {
+    if (!sessionReady) return
+    const paths = tabs
+      .filter((t) => !t.untitled && !t.orphan)
+      .map((t) => t.path)
+    void SyncWatchedFiles(paths).catch(() => {
+      /* watcher optional */
+    })
+  }, [sessionReady, tabs])
+
+  useEffect(() => {
+    if (!sessionReady) return
+    const off = EventsOn('app:file-renamed', (payload: { oldPath?: string; newPath?: string }) => {
+      const oldPath = payload?.oldPath || ''
+      const newPath = payload?.newPath || ''
+      if (!oldPath || !newPath) return
+      void promptReloadRenamed(oldPath, newPath)
+    })
+    return () => {
+      off()
+    }
+  }, [sessionReady, promptReloadRenamed])
+
   const checkMissingSources = useCallback(async () => {
     if (missingCheckBusyRef.current || quittingRef.current) return
     if (
@@ -1103,6 +1200,7 @@ function AppShell() {
       || placementResolverRef.current
       || parentFolderResolverRef.current
       || missingResolverRef.current
+      || renamedResolverRef.current
     ) {
       return
     }
@@ -1130,6 +1228,38 @@ function AppShell() {
         }
         if (missingPromptedRef.current.has(tab.path)) continue
         missingPromptedRef.current.add(tab.path)
+
+        let renamedTo = ''
+        try {
+          renamedTo = (await FindLikelyRenamedFile(tab.path, tab.size || 0)) || ''
+        } catch {
+          renamedTo = ''
+        }
+        if (renamedTo && !pathsEqual(renamedTo, tab.path)) {
+          const renameChoice = await askReloadRenamed(tab.path, renamedTo)
+          if (renameChoice === 'reload') {
+            try {
+              await retargetTabAfterRename(tab.path, renamedTo)
+            } catch (e) {
+              setError(String(e))
+            }
+            continue
+          }
+          // No → keep buffer under the old name when possible (Notepad++-like).
+          if (canKeepMissingTab(tab)) {
+            setTabs((prev) =>
+              prev.map((t) =>
+                t.path === tab.path ? { ...t, orphan: true, dirty: true } : t,
+              ),
+            )
+            setStatus(`Kept ${tab.name} (renamed on disk)`)
+          } else {
+            removeTab(tab.path)
+            setStatus(`Closed ${tab.name} (renamed on disk)`)
+          }
+          continue
+        }
+
         const canKeep = canKeepMissingTab(tab)
         const choice = await askKeepMissing(tab.path, canKeep)
         if (choice === 'keep' && canKeep) {
@@ -1147,7 +1277,7 @@ function AppShell() {
     } finally {
       missingCheckBusyRef.current = false
     }
-  }, [askKeepMissing, removeTab])
+  }, [askKeepMissing, askReloadRenamed, removeTab, retargetTabAfterRename])
 
   useEffect(() => {
     if (!sessionReady) return
@@ -1462,6 +1592,13 @@ function AppShell() {
     resolve?.(choice)
   }, [])
 
+  const handleRenamedPrompt = useCallback((choice: ReloadRenamedChoice) => {
+    const resolve = renamedResolverRef.current
+    renamedResolverRef.current = null
+    setRenamedPrompt(null)
+    resolve?.(choice)
+  }, [])
+
   const handlePlacementChoice = useCallback((choice: OpenPlacementChoice, always: boolean) => {
     const resolve = placementResolverRef.current
     placementResolverRef.current = null
@@ -1599,7 +1736,15 @@ function AppShell() {
       const typing =
         tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable
 
-      if (closePrompt || placementPrompt || parentFolderPrompt || removeAllPrompt || cancelDownloadPrompt) return
+      if (
+        closePrompt
+        || placementPrompt
+        || parentFolderPrompt
+        || removeAllPrompt
+        || cancelDownloadPrompt
+        || renamedPrompt
+        || missingPrompt
+      ) return
 
       if (goToOpen || settingsOpen) {
         if (eventMatchesShortcut(e, shortcuts.exitFullscreen) && fullscreen && !typing) {
@@ -1707,6 +1852,8 @@ function AppShell() {
     parentFolderPrompt,
     removeAllPrompt,
     cancelDownloadPrompt,
+    renamedPrompt,
+    missingPrompt,
     setExplorerOpen,
   ])
 
@@ -1986,6 +2133,12 @@ function AppShell() {
         filePath={missingPrompt?.path ?? ''}
         canKeep={missingPrompt?.canKeep ?? false}
         onChoice={handleMissingChoice}
+      />
+      <ReloadRenamedDialog
+        open={Boolean(renamedPrompt)}
+        oldPath={renamedPrompt?.oldPath ?? ''}
+        newPath={renamedPrompt?.newPath ?? ''}
+        onChoice={handleRenamedPrompt}
       />
       <OpenPlacementDialog
         open={Boolean(placementPrompt)}

@@ -38,6 +38,14 @@ export function FileExists(arg1) {
   return window['go']['app']['App']['FileExists'](arg1);
 }
 
+export function FindLikelyRenamedFile(arg1, arg2) {
+  return window['go']['app']['App']['FindLikelyRenamedFile'](arg1, arg2);
+}
+
+export function SyncWatchedFiles(arg1) {
+  return window['go']['app']['App']['SyncWatchedFiles'](arg1);
+}
+
 export function PauseUpdateDownload() {
   return window['go']['app']['App']['PauseUpdateDownload']();
 }

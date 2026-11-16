@@ -268,13 +268,31 @@ export function FileTree({
           error: '',
         })
       } catch (e) {
+        const name = folderLabel(root)
+        const wasFileOnly = prev ? isFileOnlyGroup(prev) : false
+        // Missing/renamed lone-file roots must stay file chrome (no folder chevron)
+        // and must not pin a sticky CreateFile error under the row.
+        if (wasFileOnly) {
+          next.push({
+            root,
+            name,
+            expanded: false,
+            nodes: prev?.nodes?.length
+              ? prev.nodes
+              : [{ entry: { name, path: root, isDir: false, kind: 'text' } }],
+            error: '',
+          })
+          continue
+        }
         next.push({
           root,
-          name: folderLabel(root),
+          name,
           expanded: prev?.expanded ?? true,
           nodes: prev?.nodes ?? [],
-          error: String(e),
+          // Directory list failures are transient; surface via status/refresh, not sticky tree text.
+          error: '',
         })
+        console.warn('Explorer load failed', root, e)
       }
     }
     setGroups(next)

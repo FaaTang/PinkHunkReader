@@ -21,6 +21,10 @@ export function DownloadUpdate():Promise<define.QueryResult>;
 
 export function FileExists(arg1:string):Promise<boolean>;
 
+export function FindLikelyRenamedFile(arg1:string,arg2:number):Promise<string>;
+
+export function SyncWatchedFiles(arg1:Array<string>):Promise<void>;
+
 export function PauseUpdateDownload():Promise<define.QueryResult>;
 
 export function ResumeUpdateDownload():Promise<define.QueryResult>;
