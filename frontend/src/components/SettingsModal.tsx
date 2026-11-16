@@ -31,6 +31,7 @@ import {
   type OpenPlacementPrefs,
   type OpenPlacementTarget,
 } from '../settings/openPlacement'
+import { DEFAULT_ACCENT_HEX, type ThemeMode } from '../settings/themePreferences'
 import './GoToDialog.css'
 import './SettingsModal.css'
 
@@ -48,11 +49,34 @@ const ORDER: ShortcutId[] = [
   'exitFullscreen',
 ]
 
+const THEME_MODE_OPTIONS: { id: ThemeMode; title: string; description: string }[] = [
+  {
+    id: 'system',
+    title: 'System',
+    description: 'Follow OS light / dark preference',
+  },
+  {
+    id: 'light',
+    title: 'Light',
+    description: 'Always use the light theme',
+  },
+  {
+    id: 'dark',
+    title: 'Dark',
+    description: 'Always use the dark theme',
+  },
+]
+
 const NAV: { id: SettingsSection; title: string; description: string }[] = [
   {
     id: 'general',
     title: 'General',
     description: 'Recent files & folders, auto-save, and other preferences',
+  },
+  {
+    id: 'appearance',
+    title: 'Appearance',
+    description: 'Theme mode and accent color',
   },
   {
     id: 'shortcuts',
@@ -111,6 +135,10 @@ export function SettingsModal({ update }: Props) {
     autoSave,
     setAutoSaveEnabled,
     setAutoSaveIntervalSeconds,
+    theme,
+    setThemeMode,
+    setThemeAccent,
+    resetThemeAccent,
   } = useAppSettings()
   const [capturing, setCapturing] = useState<ShortcutId | null>(null)
   const [recentDraft, setRecentDraft] = useState(String(recentMax))
@@ -400,6 +428,70 @@ export function SettingsModal({ update }: Props) {
                   <button type="button" className="toolbar-btn" onClick={resetShortcuts}>
                     Reset shortcuts
                   </button>
+                  <button type="button" className="toolbar-btn primary" onClick={closeSettings}>
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {settingsSection === 'appearance' ? (
+              <>
+                <div className="settings-section-head">
+                  <div className="settings-section-title">Appearance</div>
+                  <div className="settings-section-desc">
+                    Choose System / Light / Dark, and a custom accent color. Soft/hover shades are derived automatically.
+                  </div>
+                </div>
+                <div className="settings-list">
+                  <div className="settings-row settings-row-stack">
+                    <span className="settings-row-label">
+                      Theme mode
+                      <span className="settings-row-sub">Default follows the operating system</span>
+                    </span>
+                    <div className="settings-theme-modes">
+                      {THEME_MODE_OPTIONS.map((opt) => {
+                        const active = theme.mode === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            className={`settings-theme-mode${active ? ' active' : ''}`}
+                            onClick={() => setThemeMode(opt.id)}
+                          >
+                            <span className="settings-theme-mode-title">{opt.title}</span>
+                            <span className="settings-theme-mode-desc">{opt.description}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-row-label">
+                      Accent color
+                      <span className="settings-row-sub">Used for highlights, selection, and primary actions</span>
+                    </span>
+                    <div className="settings-accent-row">
+                      <input
+                        type="color"
+                        className="settings-accent-swatch"
+                        value={theme.accent}
+                        onChange={(e) => setThemeAccent(e.target.value)}
+                        aria-label="Accent color"
+                      />
+                      <code className="settings-accent-hex">{theme.accent}</code>
+                      <button
+                        type="button"
+                        className="toolbar-btn"
+                        disabled={theme.accent === DEFAULT_ACCENT_HEX}
+                        onClick={resetThemeAccent}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="settings-actions">
                   <button type="button" className="toolbar-btn primary" onClick={closeSettings}>
                     Done
                   </button>

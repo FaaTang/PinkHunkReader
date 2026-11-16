@@ -293,9 +293,9 @@ body.is-resizing-explorer * {
 
 .error-banner {
   padding: 6px 12px;
-  background: #fef2f2;
+  background: color-mix(in srgb, var(--ph-danger) 12%, var(--ph-bg-panel));
   color: var(--ph-danger);
-  border-bottom: 1px solid #fecaca;
+  border-bottom: 1px solid color-mix(in srgb, var(--ph-danger) 28%, transparent);
   font-size: 12px;
 }
 

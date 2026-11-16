@@ -125,7 +125,7 @@
 }
 
 .preview-wrap pre {
-  background: #f3f4f6;
+  background: var(--ph-bg-panel-2);
   color: var(--ph-fg-1);
   border: 1px solid var(--ph-br-1);
   padding: 12px;
@@ -154,12 +154,12 @@
 }
 
 .preview-wrap thead {
-  background: #f3f4f6;
+  background: var(--ph-bg-panel-2);
 }
 
 .preview-wrap th,
 .preview-wrap td {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--ph-br-2);
   padding: 8px 12px;
   text-align: left;
   vertical-align: top;
@@ -168,12 +168,12 @@
 
 .preview-wrap th {
   font-weight: 650;
-  background: #f3f4f6;
+  background: var(--ph-bg-panel-2);
   white-space: nowrap;
 }
 
 .preview-wrap tbody tr:nth-child(even) {
-  background: #fafafa;
+  background: var(--ph-bg-hover);
 }
 
 .preview-wrap blockquote {

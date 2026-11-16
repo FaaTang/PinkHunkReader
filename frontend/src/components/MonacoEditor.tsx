@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import Editor, { type EditorProps } from '@monaco-editor/react'
 import { ViewerLoading } from './ViewerLoading'
 import { ensureMonaco, isMonacoReady, whenMonacoReady } from '../monaco'
+import { useAppSettings } from '../settings/AppSettingsContext'
 
 /** Thin wrapper that waits for local monaco before mounting the editor. */
 export function MonacoEditor(props: EditorProps) {
+  const { darkMode } = useAppSettings()
   const [ready, setReady] = useState(isMonacoReady())
 
   useEffect(() => {
@@ -34,6 +36,7 @@ export function MonacoEditor(props: EditorProps) {
         </div>
       }
       {...props}
+      theme={darkMode ? 'vs-dark' : 'vs'}
     />
   )
 }

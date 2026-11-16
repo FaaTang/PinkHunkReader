@@ -32,6 +32,7 @@ Part of the **PinkHunk** series (alongside PinkHunkDB / PinkHunkGit).
 - **Path sandbox**: all IO stays under the opened root
 - **Recent files & folders**: listed under Open Recent; count configurable in Settings → General (default 10)
 - **Proxy & updates**: global proxy in Settings → Proxy; update check from About / preferences; download progress supports Pause / Resume / Cancel (Cancel asks for confirmation)
+- **Appearance**: Settings → Appearance — theme mode System (default) / Light / Dark, plus a custom accent color (soft/hover tones derived automatically); Monaco follows the resolved theme
 
 ## CI / Releases
 

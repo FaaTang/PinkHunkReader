@@ -21,6 +21,18 @@ import {
   loadAutoSavePreferences,
   saveAutoSavePreferences,
 } from './autoSavePreferences'
+import {
+  applyThemeToDocument,
+  DEFAULT_ACCENT_HEX,
+  loadThemePreferences,
+  readSystemPrefersDark,
+  resolveDarkMode,
+  saveThemePreferences,
+  sanitizeAccentHex,
+  sanitizeThemeMode,
+  type ThemeMode,
+  type ThemePreferences,
+} from './themePreferences'
 
 export type GoToKind = 'page' | 'line'
 
@@ -31,7 +43,7 @@ export interface GoToTarget {
   go: (n: number) => void | Promise<void>
 }
 
-export type SettingsSection = 'shortcuts' | 'general' | 'proxy' | 'about'
+export type SettingsSection = 'shortcuts' | 'general' | 'appearance' | 'proxy' | 'about'
 
 interface AppSettingsValue {
   shortcuts: ShortcutMap
@@ -45,6 +57,11 @@ interface AppSettingsValue {
   autoSave: AutoSavePreferences
   setAutoSaveEnabled: (enabled: boolean) => void
   setAutoSaveIntervalSeconds: (seconds: number) => void
+  theme: ThemePreferences
+  darkMode: boolean
+  setThemeMode: (mode: ThemeMode) => void
+  setThemeAccent: (accent: string) => void
+  resetThemeAccent: () => void
   goToTarget: GoToTarget | null
   registerGoTo: (target: GoToTarget | null) => void
   goToOpen: boolean
@@ -64,11 +81,39 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [recentMax, setRecentMaxState] = useState(() => loadRecentMax())
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => loadRecentFiles(loadRecentMax()))
   const [autoSave, setAutoSaveState] = useState<AutoSavePreferences>(() => loadAutoSavePreferences())
+  const [theme, setThemeState] = useState<ThemePreferences>(() => loadThemePreferences())
+  const [systemDark, setSystemDark] = useState(() => readSystemPrefersDark())
   const [goToOpen, setGoToOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const goToTargetRef = useRef<GoToTarget | null>(null)
   const [goToTarget, setGoToTarget] = useState<GoToTarget | null>(null)
+  const darkMode = resolveDarkMode(theme.mode, systemDark)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => setSystemDark(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+
+  useEffect(() => {
+    applyThemeToDocument(darkMode, theme.accent)
+  }, [darkMode, theme.accent])
+
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeState((prev) => saveThemePreferences({ ...prev, mode: sanitizeThemeMode(mode) }))
+  }, [])
+
+  const setThemeAccent = useCallback((accent: string) => {
+    setThemeState((prev) => saveThemePreferences({ ...prev, accent: sanitizeAccentHex(accent) }))
+  }, [])
+
+  const resetThemeAccent = useCallback(() => {
+    setThemeState((prev) => saveThemePreferences({ ...prev, accent: DEFAULT_ACCENT_HEX }))
+  }, [])
 
   const setShortcut = useCallback((id: ShortcutId, binding: ShortcutMap[ShortcutId]) => {
     setShortcuts((prev) => {
@@ -123,6 +168,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     autoSave,
     setAutoSaveEnabled,
     setAutoSaveIntervalSeconds,
+    theme,
+    darkMode,
+    setThemeMode,
+    setThemeAccent,
+    resetThemeAccent,
     goToTarget,
     registerGoTo,
     goToOpen,
@@ -150,6 +200,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     autoSave,
     setAutoSaveEnabled,
     setAutoSaveIntervalSeconds,
+    theme,
+    darkMode,
+    setThemeMode,
+    setThemeAccent,
+    resetThemeAccent,
     goToTarget,
     registerGoTo,
     goToOpen,
