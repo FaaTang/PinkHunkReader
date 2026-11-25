@@ -1883,9 +1883,6 @@ function AppShell() {
   ])
 
   const hasWorkspace = roots.length > 0 || tabs.length > 0
-  const rootsSummary = roots.length
-    ? roots.map(folderLabel).join(' · ')
-    : translate('app.status.noWorkspace')
   const locatablePaths = useMemo(
     () => tabs.filter((t) => !t.untitled && pathUnderAnyRoot(t.path, roots)).map((t) => t.path),
     [tabs, roots],
@@ -1973,7 +1970,8 @@ function AppShell() {
                     : t('app.toolbar.downloading', { percent: Math.round(update.progress.percent) })}
           </button>
         ) : null}
-        <div className="root-path" title={roots.join('\n')}>{rootsSummary}</div>
+        {/* Spacer keeps the macOS drag region without showing the workspace path list. */}
+        <div className="toolbar-spacer" aria-hidden="true" />
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}

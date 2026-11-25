@@ -66,14 +66,11 @@ html.platform-mac {
   display: none;
 }
 
-.root-path {
+/* Fills the toolbar's remaining width so the chrome stays draggable on macOS. */
+.toolbar-spacer {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ph-fg-4);
-  font-size: 12px;
+  align-self: stretch;
 }
 
 .body {

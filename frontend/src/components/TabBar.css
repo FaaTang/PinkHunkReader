@@ -9,6 +9,12 @@
   border-bottom: 1px solid var(--ph-br-1);
 }
 
+/* Files can be dropped on the tab strip just like on the explorer. */
+.tabbar.wails-drop-target-active {
+  background: color-mix(in srgb, var(--ph-accent) 10%, var(--ph-bg-chrome));
+  box-shadow: inset 0 -2px 0 var(--ph-accent);
+}
+
 .tab {
   display: flex;
   align-items: center;

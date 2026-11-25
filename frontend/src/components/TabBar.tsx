@@ -82,7 +82,11 @@ export function TabBar({
   const menuCanRevealInOs = menu ? canRevealInOs(menu.path) : false
 
   return (
-    <div className={`tabbar${closeLeading ? ' tabbar-mac' : ''}`} onContextMenu={(e) => e.preventDefault()}>
+    <div
+      className={`tabbar${closeLeading ? ' tabbar-mac' : ''}`}
+      style={{ ['--wails-drop-target' as string]: 'drop' }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {tabs.map((tab) => {
         const locateBtn = canLocate(tab.path) ? (
           <button
