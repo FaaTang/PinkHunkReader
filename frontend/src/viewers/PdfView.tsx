@@ -5,6 +5,7 @@ import { GoToButton } from '../components/GoToButton'
 import { ViewerLoading } from '../components/ViewerLoading'
 import { hasOutlinePreference, usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
 import { useRegisterGoTo } from '../settings/AppSettingsContext'
+import { t, useT } from '../i18n'
 import './viewers.css'
 
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -32,6 +33,7 @@ interface PageLayout {
 const RENDER_PAD = 1 // pages above/below viewport to keep painted
 
 export function PdfView({ path, active = true }: Props) {
+  const t = useT()
   const scrollRef = useRef<HTMLDivElement>(null)
   const pageElsRef = useRef<Map<number, HTMLDivElement>>(new Map())
   const canvasElsRef = useRef<Map<number, HTMLCanvasElement>>(new Map())
@@ -393,13 +395,19 @@ export function PdfView({ path, active = true }: Props) {
           className={`toolbar-btn${outlineOpen && outline.length > 0 ? ' active-toggle' : ''}`}
           disabled={outline.length === 0}
           onClick={() => setOutlineOpen((o) => !o)}
-          title={outline.length ? (outlineOpen ? 'Hide outline' : 'Show outline') : 'No outline in this PDF'}
+          title={
+            outline.length
+              ? outlineOpen
+                ? t('office.outline.hide')
+                : t('office.outline.show')
+              : t('office.outline.noOutlinePdf')
+          }
         >
-          {outlineOpen && outline.length > 0 ? 'Hide outline' : 'Outline'}
+          {outlineOpen && outline.length > 0 ? t('office.outline.hide') : t('office.outline.label')}
         </button>
 
         <button type="button" className="toolbar-btn" disabled={page <= 1} onClick={() => scrollToPage(page - 1)}>
-          Prev
+          {t('office.pdf.prev')}
         </button>
         <form
           className="pdf-jump"
@@ -414,7 +422,7 @@ export function PdfView({ path, active = true }: Props) {
             value={jumpDraft}
             onChange={(e) => setJumpDraft(e.target.value.replace(/[^\d]/g, ''))}
             onBlur={applyJump}
-            aria-label="Page number"
+            aria-label={t('office.pdf.pageNumber')}
           />
           <span className="pdf-jump-total">/ {pageCount || '—'}</span>
         </form>
@@ -424,12 +432,12 @@ export function PdfView({ path, active = true }: Props) {
           disabled={!pageCount || page >= pageCount}
           onClick={() => scrollToPage(page + 1)}
         >
-          Next
+          {t('office.pdf.next')}
         </button>
 
         <span className="pdf-toolbar-sep" />
 
-        <button type="button" className="toolbar-btn" onClick={() => zoomBy(-10)} title="Zoom out">
+        <button type="button" className="toolbar-btn" onClick={() => zoomBy(-10)} title={t('office.zoom.out')}>
           −
         </button>
         <button
@@ -439,11 +447,11 @@ export function PdfView({ path, active = true }: Props) {
             paintedRef.current.clear()
             setZoomPct(100)
           }}
-          title="Reset to fit width"
+          title={t('office.zoom.resetFitWidth')}
         >
           {zoomPct}%
         </button>
-        <button type="button" className="toolbar-btn" onClick={() => zoomBy(10)} title="Zoom in">
+        <button type="button" className="toolbar-btn" onClick={() => zoomBy(10)} title={t('office.zoom.in')}>
           +
         </button>
 
@@ -452,11 +460,11 @@ export function PdfView({ path, active = true }: Props) {
       </div>
 
       <div className="pdf-body">
-        <ViewerLoading visible={loading && !error} label="Loading PDF…" />
+        <ViewerLoading visible={loading && !error} label={t('office.pdf.loading')} />
         {outlineOpen && outline.length > 0 ? (
           <aside className="pdf-outline">
             <div className="outline-panel-head">
-              <span className="outline-panel-title">Outline</span>
+              <span className="outline-panel-title">{t('office.outline.label')}</span>
             </div>
             <div className="pdf-outline-scroll" ref={outlineScrollRef}>
               <OutlineTree
@@ -513,6 +521,7 @@ function OutlineTree({
   onSelect: (page: number | null) => void
   depth?: number
 }) {
+  const t = useT()
   return (
     <ul className="pdf-outline-list" style={{ paddingLeft: depth === 0 ? 0 : 10 }}>
       {nodes.map((n) => {
@@ -530,7 +539,7 @@ function OutlineTree({
                 <button
                   type="button"
                   className="pdf-outline-twist"
-                  aria-label={expanded ? 'Collapse' : 'Expand'}
+                  aria-label={expanded ? t('office.outline.collapse') : t('office.outline.expand')}
                   aria-expanded={expanded}
                   onClick={(e) => {
                     e.stopPropagation()
@@ -546,9 +555,9 @@ function OutlineTree({
                 type="button"
                 className="pdf-outline-item"
                 onClick={() => onSelect(n.page)}
-                title={n.page ? `Page ${n.page}` : n.title}
+                title={n.page ? t('office.pdf.page', { page: n.page }) : n.title}
               >
-                {n.title || '(untitled)'}
+                {n.title || t('office.pdf.untitled')}
               </button>
             </div>
             {hasKids && expanded ? (
@@ -637,5 +646,5 @@ function toUint8Array(data: unknown): Uint8Array {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
     return out
   }
-  throw new Error('Unable to parse PDF bytes')
+  throw new Error(t('office.pdf.parseFailed'))
 }

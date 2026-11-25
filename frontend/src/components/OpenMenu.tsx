@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '../i18n'
 import { useAppSettings } from '../settings/AppSettingsContext'
 import type { RecentFile } from '../settings/recentFiles'
 import { formatShortcut } from '../settings/shortcuts'
@@ -19,8 +20,10 @@ export function OpenMenu({
   onOpenRecent,
   onNewFile,
   primary = true,
-  label = 'File',
+  label,
 }: Props) {
+  const t = useT()
+  const menuLabel = label ?? t('tree.menu.file')
   const { recentFiles, shortcuts } = useAppSettings()
   const [open, setOpen] = useState(false)
   const [recentHover, setRecentHover] = useState(false)
@@ -60,7 +63,7 @@ export function OpenMenu({
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
       >
-        {label}
+        {menuLabel}
         <span className="open-menu-caret" aria-hidden>
           ▾
         </span>
@@ -70,24 +73,24 @@ export function OpenMenu({
           <button
             type="button"
             role="menuitem"
-            title={`Open file (${formatShortcut(shortcuts.open)})`}
+            title={t('tree.menu.openFileHint', { shortcut: formatShortcut(shortcuts.open) })}
             onClick={() => {
               setOpen(false)
               onOpenFile()
             }}
           >
-            Open
+            {t('common.open')}
           </button>
           <button
             type="button"
             role="menuitem"
-            title={`Open folder (${formatShortcut(shortcuts.openFolder)})`}
+            title={t('tree.menu.openFolderHint', { shortcut: formatShortcut(shortcuts.openFolder) })}
             onClick={() => {
               setOpen(false)
               onOpenFolder()
             }}
           >
-            Open Folder
+            {t('tree.menu.openFolder')}
           </button>
           <div className="open-menu-sep" role="separator" />
           <div
@@ -106,7 +109,7 @@ export function OpenMenu({
                 setRecentHover((v) => !v)
               }}
             >
-              <span>Open Recent</span>
+              <span>{t('tree.menu.openRecent')}</span>
               <span className="open-menu-submenu-chevron" aria-hidden>
                 ›
               </span>
@@ -124,14 +127,16 @@ export function OpenMenu({
                       onClick={() => pickRecent(f)}
                     >
                       <span className="open-menu-recent-name">
-                        {f.isDir ? <span className="open-menu-recent-kind">Folder</span> : null}
+                        {f.isDir ? (
+                          <span className="open-menu-recent-kind">{t('tree.menu.recentFolder')}</span>
+                        ) : null}
                         {f.name}
                       </span>
                       <span className="open-menu-recent-path">{f.path}</span>
                     </button>
                   ))
                 ) : (
-                  <div className="open-menu-flyout-empty">No recent items</div>
+                  <div className="open-menu-flyout-empty">{t('tree.menu.noRecent')}</div>
                 )}
               </div>
             ) : null}
@@ -142,13 +147,13 @@ export function OpenMenu({
               <button
                 type="button"
                 role="menuitem"
-                title={`New file (${formatShortcut(shortcuts.newFile)})`}
+                title={t('tree.menu.newFileHint', { shortcut: formatShortcut(shortcuts.newFile) })}
                 onClick={() => {
                   setOpen(false)
                   onNewFile()
                 }}
               >
-                New File
+                {t('tree.menu.newFile')}
               </button>
             </>
           ) : null}

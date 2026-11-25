@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useT } from '../i18n'
 import './GoToDialog.css'
 
 export type KeepMissingChoice = 'keep' | 'discard'
@@ -16,16 +17,17 @@ type Action = { choice: KeepMissingChoice; label: string }
 
 /** Notepad++-style prompt when an open file disappears from disk. */
 export function KeepMissingDialog({ open, filePath, canKeep, onChoice }: Props) {
+  const t = useT()
   const actionsRef = useRef<HTMLDivElement>(null)
   const actions = useMemo<Action[]>(() => {
     if (canKeep) {
       return [
-        { choice: 'keep', label: 'Yes(Y)' },
-        { choice: 'discard', label: 'No(N)' },
+        { choice: 'keep', label: t('dialogs.choice.yesKey') },
+        { choice: 'discard', label: t('dialogs.choice.noKey') },
       ]
     }
-    return [{ choice: 'discard', label: 'OK' }]
-  }, [canKeep])
+    return [{ choice: 'discard', label: t('common.ok') }]
+  }, [canKeep, t])
   const [selected, setSelected] = useState(0)
 
   useEffect(() => {
@@ -95,13 +97,17 @@ export function KeepMissingDialog({ open, filePath, canKeep, onChoice }: Props) 
         className="goto-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={canKeep ? 'Keep file' : 'Source file missing'}
+        aria-label={
+          canKeep ? t('dialogs.keepMissing.ariaKeep') : t('dialogs.keepMissing.sourceMissing')
+        }
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="goto-title">{canKeep ? 'Keep file?' : 'Source file missing'}</div>
+        <div className="goto-title">
+          {canKeep ? t('dialogs.keepMissing.titleKeep') : t('dialogs.keepMissing.sourceMissing')}
+        </div>
         <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
-          The file &quot;{filePath}&quot; is no longer available.
-          {canKeep ? ' Keep it in the editor?' : ''}
+          {t('dialogs.keepMissing.message', { file: filePath })}
+          {canKeep ? t('dialogs.keepMissing.keepHint') : ''}
         </p>
         <div className="goto-actions" style={{ flexWrap: 'wrap' }} ref={actionsRef}>
           {actions.map((action, index) => (

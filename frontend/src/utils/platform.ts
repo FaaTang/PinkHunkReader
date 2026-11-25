@@ -1,4 +1,5 @@
 import { Environment } from '../../wailsjs/runtime/runtime'
+import { t } from '../i18n'
 
 export type AppPlatform = 'mac' | 'windows' | 'linux' | 'unknown'
 
@@ -34,9 +35,9 @@ function applyPlatformClass(platform: AppPlatform) {
 /** Context-menu label for revealing a path in the OS file manager. */
 export function revealInOsLabel(): string {
   const platform = (typeof document !== 'undefined' && document.documentElement.dataset.platform) || ''
-  if (platform === 'mac' || (!platform && isApplePlatform())) return 'Reveal in Finder'
-  if (platform === 'windows') return 'Reveal in File Explorer'
-  return 'Show in Folder'
+  if (platform === 'mac' || (!platform && isApplePlatform())) return t('common.revealInFinder')
+  if (platform === 'windows') return t('common.revealInFileExplorer')
+  return t('common.showInFolder')
 }
 
 /**

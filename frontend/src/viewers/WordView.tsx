@@ -5,6 +5,7 @@ import { MdOutline, type MdHeadingItem } from '../components/MdOutline'
 import { ViewerLoading } from '../components/ViewerLoading'
 import { usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
 import { toUint8Array } from '../util/bytes'
+import { t, useT } from '../i18n'
 import './viewers.css'
 
 /** Legacy Word 97–2003 extension (.doc), not .docx. */
@@ -27,12 +28,10 @@ interface PreparedDoc {
 }
 
 const PAGE_WIDTH = 816
-const LEGACY_DOC_UNSUPPORTED =
-  'Legacy .doc is not supported. Please save as .docx and open again.'
 
 /** Tag mammoth HTML headings with stable ids and collect outline entries. */
 export function prepareWordHtml(rawHtml: string): PreparedDoc {
-  const source = (rawHtml || '').trim() || '<p>(empty document)</p>'
+  const source = (rawHtml || '').trim() || `<p>${t('office.word.emptyDocument')}</p>`
   const doc = new DOMParser().parseFromString(`<div id="word-root">${source}</div>`, 'text/html')
   const root = doc.getElementById('word-root')
   if (!root) {
@@ -55,6 +54,7 @@ export function prepareWordHtml(rawHtml: string): PreparedDoc {
 }
 
 export function WordView({ path, name, active = true }: Props) {
+  const t = useT()
   const docRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [html, setHtml] = useState('')
@@ -98,7 +98,7 @@ export function WordView({ path, name, active = true }: Props) {
     setActiveLine(1)
 
     if (isLegacyDocName(name) || isLegacyDocName(path)) {
-      setError(LEGACY_DOC_UNSUPPORTED)
+      setError(t('office.word.legacyDocUnsupported'))
       setLoading(false)
       return
     }
@@ -190,33 +190,41 @@ export function WordView({ path, name, active = true }: Props) {
           className={`toolbar-btn${outlineOpen && outlineEnabled ? ' active-toggle' : ''}`}
           disabled={!outlineEnabled}
           onClick={() => setOutlineOpen((o) => !o)}
-          title={outlineEnabled ? (outlineOpen ? 'Hide outline' : 'Show outline') : 'No headings'}
+          title={
+            outlineEnabled
+              ? outlineOpen
+                ? t('office.outline.hide')
+                : t('office.outline.show')
+              : t('office.outline.noHeadings')
+          }
         >
-          {outlineOpen && outlineEnabled ? 'Hide outline' : 'Outline'}
+          {outlineOpen && outlineEnabled ? t('office.outline.hide') : t('office.outline.label')}
         </button>
-        <button type="button" className="toolbar-btn" onClick={() => setZoomPct((z) => Math.max(50, z - 10))} title="Zoom out">
+        <button type="button" className="toolbar-btn" onClick={() => setZoomPct((z) => Math.max(50, z - 10))} title={t('office.zoom.out')}>
           −
         </button>
         <button
           type="button"
           className="toolbar-btn pdf-zoom-label"
           onClick={() => setZoomPct(100)}
-          title="Reset to fit width"
+          title={t('office.zoom.resetFitWidth')}
         >
           {zoomPct}%
         </button>
-        <button type="button" className="toolbar-btn" onClick={() => setZoomPct((z) => Math.min(300, z + 10))} title="Zoom in">
+        <button type="button" className="toolbar-btn" onClick={() => setZoomPct((z) => Math.min(300, z + 10))} title={t('office.zoom.in')}>
           +
         </button>
-        <span className="office-toolbar-label">Word · read-only</span>
+        <span className="office-toolbar-label">{t('office.word.readOnly')}</span>
         {messages.length > 0 ? (
           <span className="office-toolbar-hint" title={messages.join('\n')}>
-            {messages.length} conversion note{messages.length === 1 ? '' : 's'}
+            {messages.length === 1
+              ? t('office.word.conversionNoteOne', { count: messages.length })
+              : t('office.word.conversionNotesMany', { count: messages.length })}
           </span>
         ) : null}
       </div>
       <div className="office-body media-wrap-loading-host">
-        <ViewerLoading visible={loading} label="Loading Word…" detail={name} />
+        <ViewerLoading visible={loading} label={t('office.word.loading')} detail={name} />
         {!loading ? (
           <div className="office-split md-body">
             <MdOutline

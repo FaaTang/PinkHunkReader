@@ -5,6 +5,7 @@ import { MdOutline, parseMdHeadings } from '../components/MdOutline'
 import { MdViewModeToggle, type MdViewMode } from '../components/MdViewModeToggle'
 import { MarkdownPreview } from './MarkdownPreview'
 import { usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
+import { useT } from '../i18n'
 import { useRegisterGoTo } from '../settings/AppSettingsContext'
 import { scrollPreviewToHeading } from '../utils/mdHeadingAnchor'
 import './viewers.css'
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function MarkdownView({ path, content, editable, active = true, onChange }: Props) {
+  const t = useT()
   const editorRef = useRef<any>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const [activeLine, setActiveLine] = useState(1)
@@ -93,14 +95,26 @@ export function MarkdownView({ path, content, editable, active = true, onChange 
           className={`toolbar-btn${outlineOpen && headings.length > 0 ? ' active-toggle' : ''}`}
           disabled={headings.length === 0}
           onClick={() => setOutlineOpen((o) => !o)}
-          title={headings.length ? (outlineOpen ? 'Hide outline' : 'Show outline') : 'No headings'}
+          title={
+            headings.length
+              ? outlineOpen
+                ? t('viewers.mdOutline.hide')
+                : t('viewers.mdOutline.show')
+              : t('viewers.mdOutline.noHeadings')
+          }
         >
-          {outlineOpen && headings.length > 0 ? 'Hide outline' : 'Outline'}
+          {outlineOpen && headings.length > 0
+            ? t('viewers.mdOutline.hide')
+            : t('viewers.mdOutline.label')}
         </button>
         <MdViewModeToggle mode={mode} onChange={setMode} />
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: 'var(--ph-fg-4)' }}>
-          {mode === 'split' ? 'Edit + Preview' : mode === 'edit' ? 'Edit only' : 'Preview only'}
+          {mode === 'split'
+            ? t('viewers.mdView.split')
+            : mode === 'edit'
+              ? t('viewers.mdView.editOnly')
+              : t('viewers.mdView.previewOnly')}
         </span>
       </div>
       <div className="md-body">
@@ -112,7 +126,7 @@ export function MarkdownView({ path, content, editable, active = true, onChange 
         />
         <div className={`viewer-split mode-${mode}`}>
           <div className="viewer-pane viewer-pane-edit">
-            <div className="pane-label">Edit</div>
+            <div className="pane-label">{t('viewers.mdView.paneEdit')}</div>
             <div className="editor-wrap">
               <MonacoEditor
                 height="100%"
@@ -130,14 +144,13 @@ export function MarkdownView({ path, content, editable, active = true, onChange 
                   minimap: { enabled: false },
                   fontSize: 13,
                   wordWrap: 'on',
-                  scrollBeyondLastLine: true,
-                  automaticLayout: true,
+                      automaticLayout: true,
                 }}
               />
             </div>
           </div>
           <div className="viewer-pane viewer-pane-preview">
-            <div className="pane-label">Preview</div>
+            <div className="pane-label">{t('viewers.mdView.panePreview')}</div>
             <div className="preview-wrap" ref={previewRef}>
               <MarkdownPreview content={content} />
             </div>

@@ -10,6 +10,7 @@ import {
   useWindowedFile,
 } from '../hooks/useWindowedFile'
 import { useMonacoPaging } from '../hooks/useMonacoPaging'
+import { useT } from '../i18n'
 import { useRegisterGoTo } from '../settings/AppSettingsContext'
 import { langFromPath } from '../utils/lang'
 import './viewers.css'
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export function PagedText({ path, active = true, onDirty, registerSave }: Props) {
+  const t = useT()
   const {
     startLine, endLine, totalLines, windowLines,
     hasNext, loading, error, pageNext, ensureAhead, ensureThrough, ensureAll,
@@ -149,11 +151,13 @@ export function PagedText({ path, active = true, onDirty, registerSave }: Props)
         <GoToButton />
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: 'var(--ph-fg-4)' }}>
-          Edit (paged) · preloaded {startLine}–{endLine}{totalLines > 0 ? ` / ${totalLines}` : ''}
+          {totalLines > 0
+            ? t('viewers.pagedText.barTotal', { start: startLine, end: endLine, total: totalLines })
+            : t('viewers.pagedText.bar', { start: startLine, end: endLine })}
         </span>
       </div>
       <div className="editor-wrap" style={{ flex: 1, position: 'relative' }}>
-        <ViewerLoading visible={bootLoading} label="Loading document…" />
+        <ViewerLoading visible={bootLoading} label={t('viewers.paged.loadingDocument')} />
         <MonacoEditor
           height="100%"
           language={langFromPath(path)}
@@ -172,7 +176,6 @@ export function PagedText({ path, active = true, onDirty, registerSave }: Props)
             minimap: { enabled: false },
             fontSize: 13,
             wordWrap: 'on',
-            scrollBeyondLastLine: true,
             automaticLayout: true,
             renderWhitespace: 'none',
             quickSuggestions: false,
@@ -185,11 +188,17 @@ export function PagedText({ path, active = true, onDirty, registerSave }: Props)
       <ScrollLoadFooter visible={bottomLoading} />
       <div className="large-bar">
         <span>
-          Preloaded {startLine}–{endLine}
-          {totalLines > 0 ? ` / ${totalLines}` : ''}
+          {totalLines > 0
+            ? t('viewers.paged.statusTotal', { start: startLine, end: endLine, total: totalLines })
+            : t('viewers.paged.status', { start: startLine, end: endLine })}
           {' · '}
-          prefetch {windowLines}/page
-          {loading ? ' · Loading…' : hasNext ? ' · scroll to load more' : ' · end of file'}
+          {t('viewers.paged.prefetch', { lines: windowLines })}
+          {' · '}
+          {loading
+            ? t('viewers.paged.loading')
+            : hasNext
+              ? t('viewers.paged.scrollMore')
+              : t('viewers.paged.endOfFile')}
         </span>
         {error ? <span style={{ color: 'var(--ph-danger)' }}>{error}</span> : null}
         <span style={{ flex: 1 }} />
@@ -199,7 +208,7 @@ export function PagedText({ path, active = true, onDirty, registerSave }: Props)
           disabled={!hasNext || loading}
           onClick={() => void pageNext()}
         >
-          Load more
+          {t('viewers.paged.loadMore')}
         </button>
       </div>
     </div>

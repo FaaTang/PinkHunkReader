@@ -5,6 +5,7 @@ import { ReadBytes } from '../../wailsjs/go/app/App'
 import { ClipboardSetText } from '../../wailsjs/runtime/runtime'
 import { ViewerLoading } from '../components/ViewerLoading'
 import { toUint8Array } from '../util/bytes'
+import { useT } from '../i18n'
 import './viewers.css'
 
 interface Props {
@@ -35,6 +36,7 @@ const COL_AUTOFIT_MAX_PX = 1200
 const ROW_NUM_COL_PX = 44
 
 export function ExcelView({ path, name }: Props) {
+  const t = useT()
   const [sheets, setSheets] = useState<SheetGrid[]>([])
   const [active, setActive] = useState(0)
   const [error, setError] = useState('')
@@ -312,10 +314,10 @@ export function ExcelView({ path, name }: Props) {
   return (
     <div className="viewer-single office-root">
       <div className="office-toolbar">
-        <span className="office-toolbar-label">Excel · read-only</span>
+        <span className="office-toolbar-label">{t('office.excel.readOnly')}</span>
         {truncated ? (
           <span className="office-toolbar-hint">
-            Showing first {MAX_ROWS} rows × {MAX_COLS} cols
+            {t('office.excel.truncatedHint', { rows: MAX_ROWS, cols: MAX_COLS })}
           </span>
         ) : null}
         <span style={{ flex: 1 }} />
@@ -331,11 +333,11 @@ export function ExcelView({ path, name }: Props) {
         ))}
       </div>
       <div className="office-body media-wrap-loading-host">
-        <ViewerLoading visible={loading} label="Loading Excel…" detail={name} />
+        <ViewerLoading visible={loading} label={t('office.excel.loading')} detail={name} />
         {!loading && current ? (
           <div className="office-sheet-wrap" onClick={onSheetClick} onScroll={onSheetScroll}>
             {current.rows.length === 0 ? (
-              <div className="empty">Empty sheet</div>
+              <div className="empty">{t('office.excel.emptySheet')}</div>
             ) : (
               <table ref={tableRef} className="office-sheet" style={{ width: tableWidth }}>
                 <colgroup>
@@ -358,13 +360,13 @@ export function ExcelView({ path, name }: Props) {
                         key={ci}
                         className="office-col-letter"
                         scope="col"
-                        title="Double-click to autofit"
+                        title={t('office.excel.autofitTitle')}
                         onDoubleClick={(e) => onColAutofitDoubleClick(ci, e)}
                       >
                         {colLetter(ci)}
                         <span
                           className="office-col-resize"
-                          title="Drag to resize · double-click to autofit"
+                          title={t('office.excel.resizeTitle')}
                           onPointerDown={(e) => onResizePointerDown(ci, e)}
                           onPointerMove={onResizePointerMove}
                           onPointerUp={onResizePointerUp}
@@ -401,21 +403,21 @@ export function ExcelView({ path, name }: Props) {
               ref={cellTipRef}
               className="office-cell-tip"
               role="dialog"
-              aria-label="Cell value"
+              aria-label={t('office.excel.cellValue')}
               onClick={(e) => e.stopPropagation()}
             >
               <pre className="office-cell-tip-text">{cellTip.text}</pre>
               <button
                 type="button"
                 className="office-cell-tip-copy"
-                title="Copy cell"
+                title={t('office.excel.copyCell')}
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
                   void onCopyCellTip()
                 }}
               >
-                {cellTipCopied ? 'Copied' : 'Copy'}
+                {cellTipCopied ? t('common.copied') : t('common.copy')}
               </button>
             </div>,
             document.body,

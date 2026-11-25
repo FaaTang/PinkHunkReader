@@ -213,7 +213,6 @@ export function TextView({
               minimap: { enabled: false },
               fontSize: 13,
               wordWrap: 'on',
-              scrollBeyondLastLine: true,
               automaticLayout: true,
             }}
           />

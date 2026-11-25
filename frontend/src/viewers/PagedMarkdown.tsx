@@ -12,9 +12,10 @@ import {
   useWindowedFile,
 } from '../hooks/useWindowedFile'
 import { useMonacoPaging } from '../hooks/useMonacoPaging'
-import { useRegisterGoTo } from '../settings/AppSettingsContext'
 import { hasOutlinePreference, usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
-import { scrollPreviewToHeading } from '../utils/mdHeadingAnchor'
+import { useT } from '../i18n'
+import { useRegisterGoTo } from '../settings/AppSettingsContext'
+import { plainHeadingText, scrollPreviewToHeading } from '../utils/mdHeadingAnchor'
 import { MarkdownPreview } from './MarkdownPreview'
 import './viewers.css'
 
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Props) {
+  const t = useT()
   const {
     content, startLine, endLine, totalLines, windowLines,
     hasNext, loading, error, pageNext, ensureAhead, ensureThrough, ensureAll,
@@ -67,7 +69,7 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
         if (cancelled) return
         const list = (rows ?? []).map((r) => ({
           level: r.level,
-          title: r.title,
+          title: plainHeadingText(r.title),
           line: r.line,
         }))
         setHeadings(list)
@@ -246,20 +248,38 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
           className={`toolbar-btn${outlineOpen && headings.length > 0 ? ' active-toggle' : ''}`}
           disabled={headings.length === 0}
           onClick={() => setOutlineOpen((o) => !o)}
-          title={headings.length ? (outlineOpen ? 'Hide outline' : 'Show outline') : 'No headings'}
+          title={
+            headings.length
+              ? outlineOpen
+                ? t('viewers.mdOutline.hide')
+                : t('viewers.mdOutline.show')
+              : t('viewers.mdOutline.noHeadings')
+          }
         >
-          {outlineOpen && headings.length > 0 ? 'Hide outline' : 'Outline'}
+          {outlineOpen && headings.length > 0
+            ? t('viewers.mdOutline.hide')
+            : t('viewers.mdOutline.label')}
         </button>
         <MdViewModeToggle mode={mode} onChange={setMode} />
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: 'var(--ph-fg-4)' }}>
-          {mode === 'split' ? 'Edit + Preview' : mode === 'edit' ? 'Edit only' : 'Preview only'}
+          {mode === 'split'
+            ? t('viewers.mdView.split')
+            : mode === 'edit'
+              ? t('viewers.mdView.editOnly')
+              : t('viewers.mdView.previewOnly')}
           {' · '}
-          preloaded {startLine}–{endLine}{totalLines > 0 ? ` / ${totalLines}` : ''}
+          {totalLines > 0
+            ? t('viewers.paged.inlinePreloadedTotal', {
+                start: startLine,
+                end: endLine,
+                total: totalLines,
+              })
+            : t('viewers.paged.inlinePreloaded', { start: startLine, end: endLine })}
         </span>
       </div>
       <div className="md-body">
-        <ViewerLoading visible={bootLoading} label="Loading document…" />
+        <ViewerLoading visible={bootLoading} label={t('viewers.paged.loadingDocument')} />
         <MdOutline
           headings={headings}
           activeLine={activeLine}
@@ -268,7 +288,7 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
         />
         <div className={`viewer-split mode-${mode}`}>
           <div className="viewer-pane viewer-pane-edit">
-            <div className="pane-label">Edit (paged)</div>
+            <div className="pane-label">{t('viewers.pagedMd.paneEdit')}</div>
             <div className="editor-wrap">
               <MonacoEditor
                 height="100%"
@@ -289,8 +309,7 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
                   minimap: { enabled: false },
                   fontSize: 13,
                   wordWrap: 'on',
-                  scrollBeyondLastLine: true,
-                  automaticLayout: true,
+                      automaticLayout: true,
                   renderWhitespace: 'none',
                   quickSuggestions: false,
                   occurrencesHighlight: 'off' as any,
@@ -302,7 +321,13 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
           </div>
           <div className="viewer-pane viewer-pane-preview">
             <div className="pane-label">
-              Preview (preloaded {startLine}–{endLine}{totalLines > 0 ? ` / ${totalLines}` : ''})
+              {totalLines > 0
+                ? t('viewers.pagedMd.previewPaneTotal', {
+                    start: startLine,
+                    end: endLine,
+                    total: totalLines,
+                  })
+                : t('viewers.pagedMd.previewPane', { start: startLine, end: endLine })}
             </div>
             <div className="preview-wrap" ref={previewRef}>
               <MarkdownPreview content={deferredContent} />
@@ -313,11 +338,17 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
       <ScrollLoadFooter visible={bottomLoading} />
       <div className="large-bar">
         <span>
-          Preloaded {startLine}–{endLine}
-          {totalLines > 0 ? ` / ${totalLines}` : ''}
+          {totalLines > 0
+            ? t('viewers.paged.statusTotal', { start: startLine, end: endLine, total: totalLines })
+            : t('viewers.paged.status', { start: startLine, end: endLine })}
           {' · '}
-          prefetch {windowLines}/page
-          {loading ? ' · Loading…' : hasNext ? ' · scroll to load more' : ' · end of file'}
+          {t('viewers.paged.prefetch', { lines: windowLines })}
+          {' · '}
+          {loading
+            ? t('viewers.paged.loading')
+            : hasNext
+              ? t('viewers.paged.scrollMore')
+              : t('viewers.paged.endOfFile')}
         </span>
         {error ? <span style={{ color: 'var(--ph-danger)' }}>{error}</span> : null}
         <span style={{ flex: 1 }} />
@@ -327,7 +358,7 @@ export function PagedMarkdown({ path, active = true, onDirty, registerSave }: Pr
           disabled={!hasNext || loading}
           onClick={() => void pageNext()}
         >
-          Load more
+          {t('viewers.paged.loadMore')}
         </button>
       </div>
     </div>

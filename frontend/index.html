@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
@@ -16,6 +16,14 @@
           var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
           document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) { /* ignore */ }
+        try {
+          var rawLang = localStorage.getItem('pinkhunk-reader.language') || 'system';
+          var prefersZh = rawLang === 'zh' || (rawLang === 'system' && (navigator.languages || [navigator.language]).some(function (tag) {
+            return /^zh(-|$)/i.test(tag);
+          }));
+          document.documentElement.lang = prefersZh ? 'zh-CN' : 'en';
+          document.documentElement.setAttribute('data-lang', prefersZh ? 'zh' : 'en');
         } catch (e) { /* ignore */ }
       })();
     </script>

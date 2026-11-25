@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { getLangPref, setLangPref, useT, type LangPref, type TranslationKey } from '../i18n'
 import { useAppSettings, type SettingsSection } from '../settings/AppSettingsContext'
 import {
-  SHORTCUT_LABELS,
+  shortcutLabel,
   type ShortcutId,
   bindingFromEvent,
   formatShortcut,
@@ -49,49 +50,75 @@ const ORDER: ShortcutId[] = [
   'exitFullscreen',
 ]
 
-const THEME_MODE_OPTIONS: { id: ThemeMode; title: string; description: string }[] = [
+const THEME_MODE_OPTIONS: {
+  id: ThemeMode
+  titleKey: TranslationKey
+  descriptionKey: TranslationKey
+}[] = [
   {
     id: 'system',
-    title: 'System',
-    description: 'Follow OS light / dark preference',
+    titleKey: 'settings.appearance.themeSystem',
+    descriptionKey: 'settings.appearance.themeSystemDescription',
   },
   {
     id: 'light',
-    title: 'Light',
-    description: 'Always use the light theme',
+    titleKey: 'settings.appearance.themeLight',
+    descriptionKey: 'settings.appearance.themeLightDescription',
   },
   {
     id: 'dark',
-    title: 'Dark',
-    description: 'Always use the dark theme',
+    titleKey: 'settings.appearance.themeDark',
+    descriptionKey: 'settings.appearance.themeDarkDescription',
   },
 ]
 
-const NAV: { id: SettingsSection; title: string; description: string }[] = [
+const LANGUAGE_OPTIONS: {
+  id: LangPref
+  titleKey: TranslationKey
+  descriptionKey: TranslationKey
+}[] = [
+  {
+    id: 'system',
+    titleKey: 'settings.language.system',
+    descriptionKey: 'settings.language.systemDescription',
+  },
+  {
+    id: 'en',
+    titleKey: 'settings.language.english',
+    descriptionKey: 'settings.language.englishDescription',
+  },
+  {
+    id: 'zh',
+    titleKey: 'settings.language.zh',
+    descriptionKey: 'settings.language.zhDescription',
+  },
+]
+
+const NAV: { id: SettingsSection; titleKey: TranslationKey; descriptionKey: TranslationKey }[] = [
   {
     id: 'general',
-    title: 'General',
-    description: 'Recent files & folders, auto-save, and other preferences',
+    titleKey: 'settings.nav.general.title',
+    descriptionKey: 'settings.nav.general.description',
   },
   {
     id: 'appearance',
-    title: 'Appearance',
-    description: 'Theme mode and accent color',
+    titleKey: 'settings.nav.appearance.title',
+    descriptionKey: 'settings.nav.appearance.description',
   },
   {
     id: 'shortcuts',
-    title: 'Shortcuts',
-    description: 'Keyboard bindings for common actions',
+    titleKey: 'settings.nav.shortcuts.title',
+    descriptionKey: 'settings.nav.shortcuts.description',
   },
   {
     id: 'proxy',
-    title: 'Proxy',
-    description: 'HTTP / SOCKS5 for updates',
+    titleKey: 'settings.nav.proxy.title',
+    descriptionKey: 'settings.nav.proxy.description',
   },
   {
     id: 'about',
-    title: 'About',
-    description: 'Version and software updates',
+    titleKey: 'settings.nav.about.title',
+    descriptionKey: 'settings.nav.about.description',
   },
 ]
 
@@ -120,6 +147,9 @@ interface Props {
 }
 
 export function SettingsModal({ update }: Props) {
+  const t = useT()
+  // Read on every render: useT() re-renders this component when the resolved language changes.
+  const langPref = getLangPref()
   const {
     settingsOpen,
     closeSettings,
@@ -252,7 +282,7 @@ export function SettingsModal({ update }: Props) {
         }
         if (cancelled) return
         if (!res?.success || !res.data) {
-          setProxyError(res?.message || 'Failed to load proxy settings')
+          setProxyError(res?.message || t('settings.proxy.loadFailed'))
           return
         }
         const type = String(res.data.type || 'socks5').toLowerCase() === 'http' ? 'http' : 'socks5'
@@ -349,7 +379,7 @@ export function SettingsModal({ update }: Props) {
         password: proxyDraft.password,
       }) as { success?: boolean; message?: string; data?: Partial<ProxyDraft> & { port?: number; type?: string } }
       if (!res?.success) {
-        setProxyError(res?.message || 'Failed to save proxy settings')
+        setProxyError(res?.message || t('settings.proxy.saveFailed'))
         return
       }
       if (res.data) {
@@ -364,8 +394,8 @@ export function SettingsModal({ update }: Props) {
         })
       }
       setProxyStatus(proxyDraft.enabled
-        ? 'Proxy enabled for update downloads'
-        : 'Proxy disabled · system proxy (if any) still applies')
+        ? t('settings.proxy.enabledStatus')
+        : t('settings.proxy.disabledStatus'))
     } catch (e) {
       setProxyError(String(e))
     } finally {
@@ -379,12 +409,12 @@ export function SettingsModal({ update }: Props) {
         className="settings-dialog settings-dialog-grouped"
         role="dialog"
         aria-modal="true"
-        aria-label="Settings"
+        aria-label={t('common.settings')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="settings-title">Settings</div>
+        <div className="settings-title">{t('common.settings')}</div>
         <div className="settings-layout">
-          <nav className="settings-nav" aria-label="Settings groups">
+          <nav className="settings-nav" aria-label={t('settings.navLabel')}>
             {NAV.map((item) => (
               <button
                 key={item.id}
@@ -392,8 +422,8 @@ export function SettingsModal({ update }: Props) {
                 className={`settings-nav-item${settingsSection === item.id ? ' active' : ''}`}
                 onClick={() => setSettingsSection(item.id)}
               >
-                <span className="settings-nav-title">{item.title}</span>
-                <span className="settings-nav-desc">{item.description}</span>
+                <span className="settings-nav-title">{t(item.titleKey)}</span>
+                <span className="settings-nav-desc">{t(item.descriptionKey)}</span>
               </button>
             ))}
           </nav>
@@ -402,34 +432,34 @@ export function SettingsModal({ update }: Props) {
             {settingsSection === 'shortcuts' ? (
               <>
                 <div className="settings-section-head">
-                  <div className="settings-section-title">Shortcuts</div>
+                  <div className="settings-section-title">{t('settings.shortcuts.title')}</div>
                   <div className="settings-section-desc">
-                    Click a binding, then press the new keys. Escape cancels capture.
+                    {t('settings.shortcuts.description')}
                   </div>
                 </div>
                 <div className="settings-list">
                   {ORDER.map((id) => (
                     <div key={id} className="settings-row">
-                      <span className="settings-row-label">{SHORTCUT_LABELS[id]}</span>
+                      <span className="settings-row-label">{shortcutLabel(id, t)}</span>
                       <button
                         type="button"
                         className={`settings-binding${capturing === id ? ' capturing' : ''}`}
                         onClick={() => setCapturing(id)}
                       >
-                        {capturing === id ? 'Press keys…' : formatShortcut(shortcuts[id])}
+                        {capturing === id ? t('settings.shortcuts.pressKeys') : formatShortcut(shortcuts[id])}
                       </button>
                     </div>
                   ))}
                 </div>
                 <p className="settings-hint">
-                  Defaults use Ctrl on Windows and Cmd on macOS for Save / Go to.
+                  {t('settings.shortcuts.hint')}
                 </p>
                 <div className="settings-actions">
                   <button type="button" className="toolbar-btn" onClick={resetShortcuts}>
-                    Reset shortcuts
+                    {t('settings.shortcuts.reset')}
                   </button>
                   <button type="button" className="toolbar-btn primary" onClick={closeSettings}>
-                    Done
+                    {t('common.done')}
                   </button>
                 </div>
               </>
@@ -438,16 +468,16 @@ export function SettingsModal({ update }: Props) {
             {settingsSection === 'appearance' ? (
               <>
                 <div className="settings-section-head">
-                  <div className="settings-section-title">Appearance</div>
+                  <div className="settings-section-title">{t('settings.appearance.title')}</div>
                   <div className="settings-section-desc">
-                    Choose System / Light / Dark, and a custom accent color. Soft/hover shades are derived automatically.
+                    {t('settings.appearance.description')}
                   </div>
                 </div>
                 <div className="settings-list">
                   <div className="settings-row settings-row-stack">
                     <span className="settings-row-label">
-                      Theme mode
-                      <span className="settings-row-sub">Default follows the operating system</span>
+                      {t('settings.appearance.themeModeTitle')}
+                      <span className="settings-row-sub">{t('settings.appearance.themeModeDescription')}</span>
                     </span>
                     <div className="settings-theme-modes">
                       {THEME_MODE_OPTIONS.map((opt) => {
@@ -459,8 +489,8 @@ export function SettingsModal({ update }: Props) {
                             className={`settings-theme-mode${active ? ' active' : ''}`}
                             onClick={() => setThemeMode(opt.id)}
                           >
-                            <span className="settings-theme-mode-title">{opt.title}</span>
-                            <span className="settings-theme-mode-desc">{opt.description}</span>
+                            <span className="settings-theme-mode-title">{t(opt.titleKey)}</span>
+                            <span className="settings-theme-mode-desc">{t(opt.descriptionKey)}</span>
                           </button>
                         )
                       })}
@@ -468,8 +498,8 @@ export function SettingsModal({ update }: Props) {
                   </div>
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      Accent color
-                      <span className="settings-row-sub">Used for highlights, selection, and primary actions</span>
+                      {t('settings.appearance.accentTitle')}
+                      <span className="settings-row-sub">{t('settings.appearance.accentDescription')}</span>
                     </span>
                     <div className="settings-accent-row">
                       <input
@@ -477,7 +507,7 @@ export function SettingsModal({ update }: Props) {
                         className="settings-accent-swatch"
                         value={theme.accent}
                         onChange={(e) => setThemeAccent(e.target.value)}
-                        aria-label="Accent color"
+                        aria-label={t('settings.appearance.accentAria')}
                       />
                       <code className="settings-accent-hex">{theme.accent}</code>
                       <button
@@ -486,14 +516,38 @@ export function SettingsModal({ update }: Props) {
                         disabled={theme.accent === DEFAULT_ACCENT_HEX}
                         onClick={resetThemeAccent}
                       >
-                        Reset
+                        {t('common.reset')}
                       </button>
+                    </div>
+                  </div>
+                  <div className="settings-row settings-row-stack">
+                    <span className="settings-row-label">
+                      {t('settings.appearance.languageTitle')}
+                      <span className="settings-row-sub">
+                        {t('settings.appearance.languageDescription')}
+                      </span>
+                    </span>
+                    <div className="settings-theme-modes">
+                      {LANGUAGE_OPTIONS.map((opt) => {
+                        const active = langPref === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            className={`settings-theme-mode${active ? ' active' : ''}`}
+                            onClick={() => setLangPref(opt.id)}
+                          >
+                            <span className="settings-theme-mode-title">{t(opt.titleKey)}</span>
+                            <span className="settings-theme-mode-desc">{t(opt.descriptionKey)}</span>
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
                 <div className="settings-actions">
                   <button type="button" className="toolbar-btn primary" onClick={closeSettings}>
-                    Done
+                    {t('common.done')}
                   </button>
                 </div>
               </>
@@ -502,17 +556,17 @@ export function SettingsModal({ update }: Props) {
             {settingsSection === 'general' ? (
               <>
                 <div className="settings-section-head">
-                  <div className="settings-section-title">General</div>
+                  <div className="settings-section-title">{t('settings.general.title')}</div>
                   <div className="settings-section-desc">
-                    Recent files & folders, auto-save, and shell / open preferences.
+                    {t('settings.general.description')}
                   </div>
                 </div>
                 <div className="settings-list">
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      Recent items to keep
+                      {t('settings.general.recentMaxTitle')}
                       <span className="settings-row-sub">
-                        {MIN_RECENT_MAX}–{MAX_RECENT_MAX} (default 10)
+                        {t('settings.general.recentMaxRange', { min: MIN_RECENT_MAX, max: MAX_RECENT_MAX, default: 10 })}
                       </span>
                     </span>
                     <input
@@ -529,14 +583,16 @@ export function SettingsModal({ update }: Props) {
                           applyRecentMax()
                         }
                       }}
-                      aria-label="Recent items to keep"
+                      aria-label={t('settings.general.recentMaxAria')}
                     />
                   </div>
                   <div className="settings-row settings-row-stack">
                     <span className="settings-row-label">
-                      Saved recently
+                      {t('settings.general.savedRecentlyTitle')}
                       <span className="settings-row-sub">
-                        {recentFiles.length} item{recentFiles.length === 1 ? '' : 's'}
+                        {recentFiles.length === 1
+                          ? t('settings.general.recentItemsOne')
+                          : t('settings.general.recentItemsMany', { count: recentFiles.length })}
                       </span>
                     </span>
                     <button
@@ -545,7 +601,7 @@ export function SettingsModal({ update }: Props) {
                       disabled={recentFiles.length === 0}
                       onClick={clearRecent}
                     >
-                      Clear list
+                      {t('settings.general.clearRecent')}
                     </button>
                   </div>
                   <div className="settings-row settings-row-stack">
@@ -556,20 +612,22 @@ export function SettingsModal({ update }: Props) {
                         onChange={(e) => setAutoSaveEnabled(e.target.checked)}
                       />
                       <span>
-                        Auto-save
+                        {t('settings.general.autoSaveTitle')}
                         <span className="settings-row-sub">
-                          Write dirty files to disk on an interval (untitled and missing-on-disk
-                          buffers still need Save / Save As). Default on.
+                          {t('settings.general.autoSaveDescription')}
                         </span>
                       </span>
                     </label>
                   </div>
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      Auto-save interval
+                      {t('settings.general.autoSaveIntervalTitle')}
                       <span className="settings-row-sub">
-                        {MIN_AUTO_SAVE_INTERVAL_SECONDS}–{MAX_AUTO_SAVE_INTERVAL_SECONDS} seconds
-                        (default {DEFAULT_AUTO_SAVE_INTERVAL_SECONDS})
+                        {t('settings.general.autoSaveIntervalRange', {
+                          min: MIN_AUTO_SAVE_INTERVAL_SECONDS,
+                          max: MAX_AUTO_SAVE_INTERVAL_SECONDS,
+                          default: DEFAULT_AUTO_SAVE_INTERVAL_SECONDS,
+                        })}
                       </span>
                     </span>
                     <input
@@ -587,19 +645,17 @@ export function SettingsModal({ update }: Props) {
                           applyAutoSaveInterval()
                         }
                       }}
-                      aria-label="Auto-save interval in seconds"
+                      aria-label={t('settings.general.autoSaveIntervalAria')}
                     />
                   </div>
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      Large file threshold
+                      {t('settings.general.largeFileTitle')}
                       <span className="settings-row-sub">
-                        Text / Markdown larger than this (MB) open in paged mode: content loads in
-                        chunks while scrolling, Format JSON is disabled, and a missing source file
-                        only shows a notice (no Keep-in-editor prompt). Files stay editable; Save
-                        still writes the full document. Minimum {MIN_LARGE_FILE_THRESHOLD_MB}MB
-                        (default {DEFAULT_LARGE_FILE_THRESHOLD_MB}). No upper limit — very large
-                        values use more memory. Applies to newly opened files.
+                        {t('settings.general.largeFileDescription', {
+                          min: MIN_LARGE_FILE_THRESHOLD_MB,
+                          default: DEFAULT_LARGE_FILE_THRESHOLD_MB,
+                        })}
                       </span>
                     </span>
                     <input
@@ -615,7 +671,7 @@ export function SettingsModal({ update }: Props) {
                           void applyLargeFileThreshold()
                         }
                       }}
-                      aria-label="Large file threshold in megabytes"
+                      aria-label={t('settings.general.largeFileAria')}
                     />
                   </div>
                   {editorPrefsStatus ? (
@@ -632,10 +688,9 @@ export function SettingsModal({ update }: Props) {
                         onChange={(e) => void applyShellContextMenu(e.target.checked)}
                       />
                       <span>
-                        OS context menu
+                        {t('settings.general.shellMenuTitle')}
                         <span className="settings-row-sub">
-                          Add &quot;Open with PinkHunkReader&quot; for files and folders (portable). Default on;
-                          rewrites the current exe path on each launch when enabled.
+                          {t('settings.general.shellMenuDescription')}
                         </span>
                       </span>
                     </label>
@@ -647,9 +702,9 @@ export function SettingsModal({ update }: Props) {
                   ) : null}
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      Open in
+                      {t('settings.general.openInTitle')}
                       <span className="settings-row-sub">
-                        When continuing to open files or folders
+                        {t('settings.general.openInDescription')}
                       </span>
                     </span>
                     <select
@@ -661,17 +716,17 @@ export function SettingsModal({ update }: Props) {
                           target: e.target.value as OpenPlacementTarget,
                         })
                       }
-                      aria-label="Open in"
+                      aria-label={t('settings.general.openInAria')}
                     >
-                      <option value="current">Current window</option>
-                      <option value="new">New window</option>
+                      <option value="current">{t('settings.general.openInCurrent')}</option>
+                      <option value="new">{t('settings.general.openInNew')}</option>
                     </select>
                   </div>
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      When already open
+                      {t('settings.general.whenOpenTitle')}
                       <span className="settings-row-sub">
-                        Ask each time, or always use the preference above
+                        {t('settings.general.whenOpenDescription')}
                       </span>
                     </span>
                     <select
@@ -683,17 +738,17 @@ export function SettingsModal({ update }: Props) {
                           mode: e.target.value as OpenPlacementMode,
                         })
                       }
-                      aria-label="When already open"
+                      aria-label={t('settings.general.whenOpenAria')}
                     >
-                      <option value="ask">Ask every time</option>
-                      <option value="always">Always use preference</option>
+                      <option value="ask">{t('settings.general.askEveryTime')}</option>
+                      <option value="always">{t('settings.general.alwaysUsePreference')}</option>
                     </select>
                   </div>
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      When opening a file
+                      {t('settings.general.parentFolderTitle')}
                       <span className="settings-row-sub">
-                        Add the parent folder to Explorer, or open the file alone
+                        {t('settings.general.parentFolderDescription')}
                       </span>
                     </span>
                     <select
@@ -705,17 +760,17 @@ export function SettingsModal({ update }: Props) {
                           parentFolderTarget: e.target.value as OpenParentFolderTarget,
                         })
                       }
-                      aria-label="When opening a file"
+                      aria-label={t('settings.general.parentFolderAria')}
                     >
-                      <option value="parent">Open parent folder</option>
-                      <option value="file">File only</option>
+                      <option value="parent">{t('settings.general.parentFolderOpenParent')}</option>
+                      <option value="file">{t('settings.general.parentFolderFileOnly')}</option>
                     </select>
                   </div>
                   <div className="settings-row">
                     <span className="settings-row-label">
-                      Remember parent folder choice
+                      {t('settings.general.parentFolderModeTitle')}
                       <span className="settings-row-sub">
-                        Ask each time, or always use the preference above
+                        {t('settings.general.parentFolderModeDescription')}
                       </span>
                     </span>
                     <select
@@ -727,10 +782,10 @@ export function SettingsModal({ update }: Props) {
                           parentFolderMode: e.target.value as OpenParentFolderMode,
                         })
                       }
-                      aria-label="Remember parent folder choice"
+                      aria-label={t('settings.general.parentFolderModeAria')}
                     >
-                      <option value="ask">Ask every time</option>
-                      <option value="always">Always use preference</option>
+                      <option value="ask">{t('settings.general.askEveryTime')}</option>
+                      <option value="always">{t('settings.general.alwaysUsePreference')}</option>
                     </select>
                   </div>
                   {openPlacementStatus ? (
@@ -742,7 +797,7 @@ export function SettingsModal({ update }: Props) {
                 <div className="settings-actions">
                   <span style={{ flex: 1 }} />
                   <button type="button" className="toolbar-btn primary" onClick={closeSettings}>
-                    Done
+                    {t('common.done')}
                   </button>
                 </div>
               </>
@@ -751,9 +806,9 @@ export function SettingsModal({ update }: Props) {
             {settingsSection === 'proxy' ? (
               <>
                 <div className="settings-section-head">
-                  <div className="settings-section-title">Proxy</div>
+                  <div className="settings-section-title">{t('settings.proxy.title')}</div>
                   <div className="settings-section-desc">
-                    Used for GitHub update checks and downloads. When disabled, system proxy env vars still apply.
+                    {t('settings.proxy.description')}
                   </div>
                 </div>
                 <div className="settings-list">
@@ -764,12 +819,12 @@ export function SettingsModal({ update }: Props) {
                         checked={proxyDraft.enabled}
                         onChange={(e) => setProxyDraft((p) => ({ ...p, enabled: e.target.checked }))}
                       />
-                      Enable global proxy
+                      {t('settings.proxy.enable')}
                     </label>
                   </div>
                   <div className={`settings-proxy-grid${proxyDraft.enabled ? '' : ' disabled'}`}>
                     <label className="settings-field">
-                      <span>Type</span>
+                      <span>{t('settings.proxy.type')}</span>
                       <select
                         value={proxyDraft.type}
                         disabled={!proxyDraft.enabled}
@@ -787,7 +842,7 @@ export function SettingsModal({ update }: Props) {
                       </select>
                     </label>
                     <label className="settings-field">
-                      <span>Port</span>
+                      <span>{t('settings.proxy.port')}</span>
                       <input
                         className="settings-number"
                         type="number"
@@ -799,7 +854,7 @@ export function SettingsModal({ update }: Props) {
                       />
                     </label>
                     <label className="settings-field settings-field-span">
-                      <span>Host</span>
+                      <span>{t('settings.proxy.host')}</span>
                       <input
                         className="settings-text"
                         disabled={!proxyDraft.enabled}
@@ -809,7 +864,7 @@ export function SettingsModal({ update }: Props) {
                       />
                     </label>
                     <label className="settings-field">
-                      <span>Username</span>
+                      <span>{t('settings.proxy.username')}</span>
                       <input
                         className="settings-text"
                         disabled={!proxyDraft.enabled}
@@ -818,7 +873,7 @@ export function SettingsModal({ update }: Props) {
                       />
                     </label>
                     <label className="settings-field">
-                      <span>Password</span>
+                      <span>{t('settings.proxy.password')}</span>
                       <input
                         className="settings-text"
                         type="password"
@@ -838,11 +893,11 @@ export function SettingsModal({ update }: Props) {
                     disabled={proxyBusy}
                     onClick={() => void saveProxy()}
                   >
-                    {proxyBusy ? 'Saving…' : 'Save proxy'}
+                    {proxyBusy ? t('settings.proxy.saving') : t('settings.proxy.save')}
                   </button>
                   <span style={{ flex: 1 }} />
                   <button type="button" className="toolbar-btn" onClick={closeSettings}>
-                    Done
+                    {t('common.done')}
                   </button>
                 </div>
               </>
@@ -851,9 +906,9 @@ export function SettingsModal({ update }: Props) {
             {settingsSection === 'about' ? (
               <>
                 <div className="settings-section-head">
-                  <div className="settings-section-title">About</div>
+                  <div className="settings-section-title">{t('settings.about.title')}</div>
                   <div className="settings-section-desc">
-                    Version info and GitHub Release updates.
+                    {t('settings.about.description')}
                   </div>
                 </div>
                 <div className="settings-list">
@@ -861,7 +916,7 @@ export function SettingsModal({ update }: Props) {
                     <span className="settings-row-label">
                       PinkHunkReader
                       <span className="settings-row-sub">
-                        v{update?.appInfo?.version || '…'}
+                        {t('settings.about.version', { version: update?.appInfo?.version || '…' })}
                         {update?.appInfo?.author ? ` · ${update.appInfo.author}` : ''}
                       </span>
                     </span>
@@ -873,8 +928,8 @@ export function SettingsModal({ update }: Props) {
                   </div>
                   <div className="settings-row settings-row-stack">
                     <span className="settings-row-label">
-                      Updates
-                      <span className="settings-row-sub">{update?.status || 'Not checked'}</span>
+                      {t('settings.about.updatesTitle')}
+                      <span className="settings-row-sub">{update?.status || t('settings.about.notChecked')}</span>
                     </span>
                     <label className="settings-check">
                       <input
@@ -882,13 +937,14 @@ export function SettingsModal({ update }: Props) {
                         checked={update?.prefs.autoPromptEnabled !== false}
                         onChange={(e) => update?.setAutoPrompt(e.target.checked)}
                       />
-                      Auto-prompt when an update is available
+                      {t('settings.about.autoPrompt')}
                     </label>
                   </div>
                   {update?.lastUpdate?.hasUpdate && update.lastUpdate.releaseNotes ? (
                     <div className="settings-notes">
                       <div className="settings-notes-title">
-                        {update.lastUpdate.releaseName || `v${update.lastUpdate.latestVersion}`}
+                        {update.lastUpdate.releaseName
+                          || t('settings.about.version', { version: update.lastUpdate.latestVersion })}
                       </div>
                       <pre className="settings-notes-body">{update.lastUpdate.releaseNotes}</pre>
                     </div>
@@ -902,7 +958,7 @@ export function SettingsModal({ update }: Props) {
                     disabled={update?.busy}
                     onClick={() => void update?.checkForUpdates(false)}
                   >
-                    Check for updates
+                    {t('settings.about.checkForUpdates')}
                   </button>
                   {update
                     && update.progress.status !== 'idle'
@@ -913,14 +969,14 @@ export function SettingsModal({ update }: Props) {
                       onClick={() => update.showProgress()}
                     >
                       {update.progress.status === 'done'
-                        ? 'Show update'
+                        ? t('settings.about.showUpdate')
                         : update.progress.status === 'error'
-                          ? 'Show download error'
+                          ? t('settings.about.showDownloadError')
                           : update.progress.status === 'cancelled'
-                            ? 'Show cancelled download'
+                            ? t('settings.about.showCancelledDownload')
                             : update.progress.status === 'paused'
-                              ? `Show paused download (${Math.round(update.progress.percent)}%)`
-                              : `Show download progress (${Math.round(update.progress.percent)}%)`}
+                              ? t('settings.about.showPausedDownload', { percent: Math.round(update.progress.percent) })
+                              : t('settings.about.showDownloadProgress', { percent: Math.round(update.progress.percent) })}
                     </button>
                   ) : null}
                   {update?.lastUpdate?.hasUpdate
@@ -934,9 +990,11 @@ export function SettingsModal({ update }: Props) {
                       disabled={update.busy}
                       onClick={() => void update.downloadUpdate()}
                     >
-                      Download
+                      {t('common.download')}
                       {update.lastUpdate.assetSize
-                        ? ` (${update.formatBytes(update.lastUpdate.assetSize)})`
+                        ? t('settings.about.downloadSizeSuffix', {
+                          size: update.formatBytes(update.lastUpdate.assetSize),
+                        })
                         : ''}
                     </button>
                   ) : null}
@@ -948,7 +1006,7 @@ export function SettingsModal({ update }: Props) {
                         disabled={update.busy}
                         onClick={() => void update.installUpdate()}
                       >
-                        Install and restart
+                        {t('settings.about.installAndRestart')}
                       </button>
                       <button
                         type="button"
@@ -956,13 +1014,13 @@ export function SettingsModal({ update }: Props) {
                         disabled={update.busy}
                         onClick={() => void update.openDownloadedPackage()}
                       >
-                        Open package
+                        {t('settings.about.openPackage')}
                       </button>
                     </>
                   ) : null}
                   <span style={{ flex: 1 }} />
                   <button type="button" className="toolbar-btn" onClick={closeSettings}>
-                    Done
+                    {t('common.done')}
                   </button>
                 </div>
               </>

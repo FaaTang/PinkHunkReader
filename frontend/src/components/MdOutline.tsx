@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useT } from '../i18n'
+import { plainHeadingText } from '../utils/mdHeadingAnchor'
 
 export interface MdHeadingItem {
   level: number
@@ -22,14 +24,34 @@ interface Props {
   open?: boolean
 }
 
-/** Parse ATX headings from markdown text (small-file / client-side). */
+/**
+ * Parse ATX headings from markdown text (small-file / client-side).
+ * Mirrors the Go parser: fenced code blocks (``` / ~~~) are skipped, up to
+ * three spaces of indentation are allowed, and only a whitespace-preceded
+ * closing hash run is stripped (`## C#` keeps `C#`).
+ */
 export function parseMdHeadings(content: string): MdHeadingItem[] {
   const out: MdHeadingItem[] = []
   const lines = content.split(/\r?\n/)
+  let fence: { marker: string; length: number } | null = null
   for (let i = 0; i < lines.length; i++) {
-    const m = /^(#{1,6})[ \t]+(.+?)[ \t#]*$/.exec(lines[i])
+    const line = lines[i]
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line)
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0]
+      const length = fenceMatch[1].length
+      const rest = fenceMatch[2].trim()
+      if (fence === null) fence = { marker, length }
+      else if (marker === fence.marker && length >= fence.length && rest === '') fence = null
+      continue
+    }
+    if (fence) continue
+    const m = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/.exec(line)
     if (!m) continue
-    out.push({ level: m[1].length, title: m[2].trim(), line: i + 1 })
+    const raw = (m[2] ?? '').replace(/(^|[ \t])#+[ \t]*$/, '$1')
+    const title = plainHeadingText(raw)
+    if (!title) continue
+    out.push({ level: m[1].length, title, line: i + 1 })
   }
   return out
 }
@@ -70,6 +92,7 @@ function findActive(nodes: OutlineNode[], line: number): { id: string; ancestors
 }
 
 export function MdOutline({ headings, activeLine, onSelect, open = true }: Props) {
+  const t = useT()
   const tree = useMemo(() => buildTree(headings), [headings])
   const active = useMemo(() => findActive(tree, activeLine), [tree, activeLine])
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
@@ -127,7 +150,7 @@ export function MdOutline({ headings, activeLine, onSelect, open = true }: Props
   return (
     <aside className="md-outline">
       <div className="outline-panel-head">
-        <span className="outline-panel-title">Outline</span>
+        <span className="outline-panel-title">{t('viewers.mdOutline.label')}</span>
       </div>
       <div className="md-outline-scroll" ref={scrollRef}>
         <OutlineTree
@@ -157,6 +180,7 @@ function OutlineTree({
   onSelect: (line: number, title: string) => void
   depth?: number
 }) {
+  const t = useT()
   return (
     <ul className="md-outline-list" style={{ paddingLeft: depth === 0 ? 0 : 10 }}>
       {nodes.map((n) => {
@@ -184,7 +208,8 @@ function OutlineTree({
               <button
                 type="button"
                 className="md-outline-item"
-                title={`Line ${n.line}`}
+                title={t('viewers.mdOutline.line', { line: n.line })}
+                aria-current={active ? 'true' : undefined}
                 onClick={() => onSelect(n.line, n.title)}
               >
                 {n.title}

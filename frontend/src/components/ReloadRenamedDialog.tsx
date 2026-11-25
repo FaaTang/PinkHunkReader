@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useT } from '../i18n'
 import './GoToDialog.css'
 
 export type ReloadRenamedChoice = 'reload' | 'keep'
@@ -14,13 +15,14 @@ type Action = { choice: ReloadRenamedChoice; label: string }
 
 /** Notepad++-style prompt when an open file was renamed on disk. */
 export function ReloadRenamedDialog({ open, oldPath, newPath, onChoice }: Props) {
+  const t = useT()
   const actionsRef = useRef<HTMLDivElement>(null)
   const actions = useMemo<Action[]>(
     () => [
-      { choice: 'reload', label: 'Yes(Y)' },
-      { choice: 'keep', label: 'No(N)' },
+      { choice: 'reload', label: t('dialogs.choice.yesKey') },
+      { choice: 'keep', label: t('dialogs.choice.noKey') },
     ],
-    [],
+    [t],
   )
   const [selected, setSelected] = useState(0)
   const oldName = oldPath.split(/[/\\]/).pop() || oldPath
@@ -92,13 +94,12 @@ export function ReloadRenamedDialog({ open, oldPath, newPath, onChoice }: Props)
         className="goto-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="File renamed"
+        aria-label={t('dialogs.reloadRenamed.ariaLabel')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="goto-title">Reload renamed file?</div>
+        <div className="goto-title">{t('dialogs.reloadRenamed.title')}</div>
         <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
-          &quot;{oldName}&quot; appears to have been renamed to &quot;{newName}&quot;.
-          Reload the new file?
+          {t('dialogs.reloadRenamed.message', { old: oldName, new: newName })}
         </p>
         <div className="goto-actions" style={{ flexWrap: 'wrap' }} ref={actionsRef}>
           {actions.map((action, index) => (

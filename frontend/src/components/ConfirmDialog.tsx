@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useT } from '../i18n'
 import './GoToDialog.css'
 
 export type ConfirmChoice = 'confirm' | 'cancel'
@@ -19,17 +20,18 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Yes(Y)',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   onChoice,
 }: Props) {
+  const t = useT()
   const actionsRef = useRef<HTMLDivElement>(null)
   const actions = useMemo<Action[]>(
     () => [
-      { choice: 'confirm', label: confirmLabel },
-      { choice: 'cancel', label: cancelLabel },
+      { choice: 'confirm', label: confirmLabel ?? t('dialogs.choice.yesKey') },
+      { choice: 'cancel', label: cancelLabel ?? t('common.cancel') },
     ],
-    [confirmLabel, cancelLabel],
+    [confirmLabel, cancelLabel, t],
   )
   const [selected, setSelected] = useState(0)
 

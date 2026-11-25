@@ -1,14 +1,21 @@
 .settings-dialog-grouped {
   width: min(860px, calc(100vw - 48px));
+  /* Fixed height for every settings section: switching tabs must not resize
+     the dialog. Long sections scroll inside the panel instead. */
+  height: min(720px, calc(100vh - 48px));
   max-height: min(720px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
   padding: 18px 18px 14px;
 }
 
 .settings-layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 14px;
-  min-height: 420px;
 }
 
 .settings-nav {
@@ -17,6 +24,8 @@
   gap: 6px;
   padding-right: 4px;
   border-right: 1px solid var(--ph-br-1);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .settings-nav-item {
@@ -125,6 +134,13 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* Let the panel scroll instead of squeezing its children. */
+.settings-panel > * {
+  flex-shrink: 0;
 }
 
 .settings-section-head {
@@ -180,8 +196,9 @@
   font-size: 13px;
 }
 
+/* The panel itself scrolls now, so lists no longer claim their own viewport. */
 .settings-dialog-grouped .settings-list {
-  max-height: min(52vh, 420px);
+  max-height: none;
 }
 
 .settings-link {
@@ -230,6 +247,12 @@
   flex-wrap: nowrap;
   gap: 8px;
   overflow-x: auto;
+  /* Keep the action row reachable while the panel scrolls. */
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding-top: 6px;
+  background: var(--ph-bg-panel);
 }
 
 .settings-dialog-grouped .settings-actions .toolbar-btn {

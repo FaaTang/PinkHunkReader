@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../i18n'
 import { isApplePlatform, revealInOsLabel } from '../utils/platform'
 import type { OpenTab } from '../types'
 import './TabBar.css'
@@ -45,6 +46,7 @@ export function TabBar({
   onLocate,
   onRevealInOs,
 }: Props) {
+  const t = useT()
   const closeLeading = isApplePlatform()
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
 
@@ -74,23 +76,23 @@ export function TabBar({
 
   if (!tabs.length) return null
 
-  const menuIndex = menu ? tabs.findIndex((t) => t.path === menu.path) : -1
+  const menuIndex = menu ? tabs.findIndex((tab) => tab.path === menu.path) : -1
   const canCloseLeft = menuIndex > 0
   const canCloseRight = menuIndex >= 0 && menuIndex < tabs.length - 1
   const menuCanRevealInOs = menu ? canRevealInOs(menu.path) : false
 
   return (
     <div className={`tabbar${closeLeading ? ' tabbar-mac' : ''}`} onContextMenu={(e) => e.preventDefault()}>
-      {tabs.map((t) => {
-        const locateBtn = canLocate(t.path) ? (
+      {tabs.map((tab) => {
+        const locateBtn = canLocate(tab.path) ? (
           <button
             type="button"
             className="tab-locate"
-            title="Locate in explorer"
-            aria-label={`Locate ${t.name} in explorer`}
+            title={t('tree.tab.locate')}
+            aria-label={t('tree.tab.locateNamed', { name: tab.name })}
             onClick={(e) => {
               e.stopPropagation()
-              onLocate(t.path)
+              onLocate(tab.path)
             }}
           >
             <LocateIcon />
@@ -100,11 +102,11 @@ export function TabBar({
           <button
             type="button"
             className="tab-close"
-            title="Close"
-            aria-label={`Close ${t.name}`}
+            title={t('common.close')}
+            aria-label={t('tree.tab.closeNamed', { name: tab.name })}
             onClick={(e) => {
               e.stopPropagation()
-              onClose(t.path)
+              onClose(tab.path)
             }}
           >
             ×
@@ -112,20 +114,20 @@ export function TabBar({
         )
         return (
           <div
-            key={t.path}
-            className={`tab ${activePath === t.path ? 'active' : ''}`}
-            onClick={() => onSelect(t.path)}
+            key={tab.path}
+            className={`tab ${activePath === tab.path ? 'active' : ''}`}
+            onClick={() => onSelect(tab.path)}
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              setMenu({ x: e.clientX, y: e.clientY, path: t.path })
+              setMenu({ x: e.clientX, y: e.clientY, path: tab.path })
             }}
-            title={t.path}
+            title={tab.path}
           >
             {closeLeading ? closeBtn : null}
             <span className="tab-name">
-              {t.dirty ? <span className="tab-dirty">● </span> : null}
-              {t.name}
+              {tab.dirty ? <span className="tab-dirty">● </span> : null}
+              {tab.name}
             </span>
             {locateBtn}
             {!closeLeading ? closeBtn : null}
@@ -163,7 +165,7 @@ export function TabBar({
               onClose(path)
             }}
           >
-            Close
+            {t('common.close')}
           </button>
           <button
             type="button"
@@ -177,7 +179,7 @@ export function TabBar({
               onCloseLeft(path)
             }}
           >
-            Close to the left
+            {t('tree.tab.closeLeft')}
           </button>
           <button
             type="button"
@@ -191,7 +193,7 @@ export function TabBar({
               onCloseRight(path)
             }}
           >
-            Close to the right
+            {t('tree.tab.closeRight')}
           </button>
           <button
             type="button"
@@ -202,7 +204,7 @@ export function TabBar({
               onCloseAll()
             }}
           >
-            Close all
+            {t('tree.tab.closeAll')}
           </button>
         </div>
       ) : null}

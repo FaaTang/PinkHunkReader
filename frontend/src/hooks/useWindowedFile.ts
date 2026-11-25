@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ReadSlice } from '../../wailsjs/go/app/App'
+import { t } from '../i18n'
 
 /** Fallback chunk size until editor layout is known. */
 export const WINDOW_LINES_FALLBACK = 40
@@ -79,7 +80,11 @@ export function useWindowedFile(path: string) {
         error: '',
       })
     } catch (e) {
-      setState((s) => ({ ...s, loading: false, error: String(e) }))
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: t('errors.readFileFailed', { error: String(e) }),
+      }))
     } finally {
       busyRef.current = false
     }
@@ -109,7 +114,11 @@ export function useWindowedFile(path: string) {
       }))
       return !slice.eof
     } catch (e) {
-      setState((s) => ({ ...s, loading: false, error: String(e) }))
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: t('errors.readFileFailed', { error: String(e) }),
+      }))
       return false
     } finally {
       busyRef.current = false

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../i18n'
 import './GoToDialog.css'
 
 export type OpenParentFolderChoice = 'parent' | 'file'
@@ -18,6 +19,7 @@ export function OpenParentFolderDialog({
   onChoice,
   onCancel,
 }: Props) {
+  const t = useT()
   const [always, setAlways] = useState(false)
   useEffect(() => {
     if (open) setAlways(false)
@@ -29,13 +31,14 @@ export function OpenParentFolderDialog({
         className="goto-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Open parent folder"
+        aria-label={t('tree.parentFolder.label')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="goto-title">Open parent folder?</div>
+        <div className="goto-title">{t('tree.parentFolder.title')}</div>
         <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
-          Choose whether to add the parent folder to Explorer when opening
-          {pathLabel ? ` “${pathLabel}”` : ' the file'}.
+          {pathLabel
+            ? t('tree.parentFolder.bodyWithLabel', { path: pathLabel })
+            : t('tree.parentFolder.bodyNoLabel')}
         </p>
         <label className="goto-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <input
@@ -43,11 +46,11 @@ export function OpenParentFolderDialog({
             checked={always}
             onChange={(e) => setAlways(e.target.checked)}
           />
-          <span>Always use this choice</span>
+          <span>{t('tree.dialog.alwaysUse')}</span>
         </label>
         <div className="goto-actions" style={{ justifyContent: 'stretch', flexWrap: 'wrap' }}>
           <button type="button" className="toolbar-btn" onClick={onCancel}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <span style={{ flex: 1 }} />
           <button
@@ -55,14 +58,14 @@ export function OpenParentFolderDialog({
             className={`toolbar-btn${defaultTarget === 'file' ? ' primary' : ''}`}
             onClick={() => onChoice('file', always)}
           >
-            File only
+            {t('tree.parentFolder.fileOnly')}
           </button>
           <button
             type="button"
             className={`toolbar-btn${defaultTarget === 'parent' ? ' primary' : ''}`}
             onClick={() => onChoice('parent', always)}
           >
-            Open parent folder
+            {t('tree.parentFolder.label')}
           </button>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+
 export type JsonFormatMode = 'pretty' | 'compact'
 
 const findNextNonWhitespace = (value: string, startIndex: number): string => {
@@ -125,7 +127,7 @@ const rewriteJsonPreservingNumberLiterals = (value: string, mode: JsonFormatMode
 /** Pretty-print or minify JSON. Toggle: if already multi-line pretty, compress; else expand. */
 export function toggleJsonFormat(text: string): { ok: true; text: string; mode: 'pretty' | 'compact' } | { ok: false; error: string } {
   const trimmed = text.trim()
-  if (!trimmed) return { ok: false, error: 'Empty JSON' }
+  if (!trimmed) return { ok: false, error: t('errors.jsonEmpty') }
   try {
     JSON.parse(trimmed)
   } catch (e) {

@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import './GoToDialog.css'
 
 interface Props {
@@ -33,34 +34,35 @@ export function UpdateProgressDialog({
   onResume,
   onCancel,
 }: Props) {
+  const t = useT()
   if (!open) return null
   const active = status === 'downloading' || status === 'start'
   const paused = status === 'paused'
   const inFlight = active || paused
   const label =
     status === 'done'
-      ? 'Download complete'
+      ? t('dialogs.updateProgress.done')
       : status === 'error'
-        ? 'Download failed'
+        ? t('dialogs.updateProgress.failed')
         : status === 'cancelled'
-          ? 'Download cancelled'
+          ? t('dialogs.updateProgress.cancelled')
           : paused
-            ? 'Download paused'
+            ? t('dialogs.updateProgress.paused')
             : active
-              ? 'Downloading update…'
-              : 'Update'
+              ? t('dialogs.updateProgress.downloading')
+              : t('dialogs.updateProgress.update')
   return (
     <div className="goto-backdrop" onMouseDown={onHide}>
       <div
         className="goto-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Update download"
+        aria-label={t('dialogs.updateProgress.ariaLabel')}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="goto-title">{label}</div>
         <p className="settings-hint" style={{ marginTop: 0 }}>
-          {version ? `v${version}` : 'Update package'}
+          {version ? `v${version}` : t('dialogs.updateProgress.package')}
           {total > 0 ? ` · ${formatBytes(downloaded)} / ${formatBytes(total)}` : ''}
         </p>
         <div className="update-progress-track" aria-hidden>
@@ -72,29 +74,29 @@ export function UpdateProgressDialog({
             type="button"
             className="toolbar-btn"
             onClick={onHide}
-            title="Hide — reopen from the toolbar or Settings → About"
+            title={t('dialogs.updateProgress.hideTitle')}
           >
-            Hide
+            {t('common.hide')}
           </button>
           {inFlight && onCancel ? (
             <button type="button" className="toolbar-btn" onClick={onCancel}>
-              Cancel
+              {t('common.cancel')}
             </button>
           ) : null}
           <span style={{ flex: 1 }} />
           {active && onPause ? (
             <button type="button" className="toolbar-btn" onClick={onPause}>
-              Pause
+              {t('dialogs.updateProgress.pause')}
             </button>
           ) : null}
           {paused && onResume ? (
             <button type="button" className="toolbar-btn primary" onClick={onResume}>
-              Resume
+              {t('dialogs.updateProgress.resume')}
             </button>
           ) : null}
           {(status === 'done' || canInstall) && !inFlight ? (
             <button type="button" className="toolbar-btn primary" onClick={onInstall}>
-              Install and restart
+              {t('dialogs.updateProgress.installAndRestart')}
             </button>
           ) : null}
         </div>

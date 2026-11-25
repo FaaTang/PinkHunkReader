@@ -142,7 +142,7 @@ func (a *App) SaveGlobalProxy(input GlobalProxyView) define.QueryResult {
 	}
 	return define.QueryResult{
 		Success: true,
-		Message: "Proxy settings saved",
+		Message: updateText("app.proxy.backend.message.saved", nil),
 		Data:    view,
 	}
 }

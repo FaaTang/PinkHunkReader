@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+
 /** Normalize Wails / bridge byte payloads into Uint8Array. */
 export function toUint8Array(data: unknown): Uint8Array {
   if (data instanceof Uint8Array) return data
@@ -20,5 +22,5 @@ export function toUint8Array(data: unknown): Uint8Array {
       return out
     }
   }
-  throw new Error('Unable to parse file bytes')
+  throw new Error(t('errors.bytesUnsupported'))
 }

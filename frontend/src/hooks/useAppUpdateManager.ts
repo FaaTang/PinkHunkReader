@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useT } from '../i18n'
+import type { TranslationKey } from '../i18n'
+import type { TranslateParams } from '../i18n/types'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import {
   CancelUpdateDownload,
@@ -58,6 +61,15 @@ type DownloadProgress = {
   message: string
 }
 
+/**
+ * Descriptor of a translated message kept in state, so it can be re-rendered
+ * when the UI language changes. Backend-supplied messages have no descriptor.
+ */
+type MessageDescriptor = {
+  key: TranslationKey
+  params?: TranslateParams
+}
+
 const emptyProgress = (): DownloadProgress => ({
   open: false,
   version: '',
@@ -84,6 +96,7 @@ export function useAppUpdateManager(opts?: {
   onPromptUpdate?: () => void
   onBeforeInstall?: () => Promise<void>
 }) {
+  const t = useT()
   const checkInFlight = useRef(false)
   const downloadInFlight = useRef(false)
   const downloadedVersionRef = useRef<string | null>(null)
@@ -93,11 +106,42 @@ export function useAppUpdateManager(opts?: {
   onBeforeInstallRef.current = opts?.onBeforeInstall
   const [prefs, setPrefs] = useState<UpdatePreferences>(() => loadUpdatePreferences())
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
-  const [status, setStatus] = useState('Not checked')
+  const [status, setStatus] = useState(() => t('update.status.notChecked'))
   const [lastUpdate, setLastUpdate] = useState<UpdateInfo | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [progress, setProgress] = useState<DownloadProgress>(emptyProgress)
+
+  // Last key-generated status / error / progress message (null when the text
+  // came from the backend or a raw exception and must stay as-is).
+  const statusMsg = useRef<MessageDescriptor | null>({ key: 'update.status.notChecked' })
+  const errorMsg = useRef<MessageDescriptor | null>(null)
+  const progressMsg = useRef<MessageDescriptor | null>(null)
+
+  const showStatus = useCallback((key: TranslationKey, params?: TranslateParams) => {
+    statusMsg.current = { key, params }
+    setStatus(t(key, params))
+  }, [t])
+
+  const showRawStatus = useCallback((text: string) => {
+    statusMsg.current = null
+    setStatus(text)
+  }, [])
+
+  const showError = useCallback((key: TranslationKey | null, params?: TranslateParams) => {
+    if (!key) {
+      errorMsg.current = null
+      setError('')
+      return
+    }
+    errorMsg.current = { key, params }
+    setError(t(key, params))
+  }, [t])
+
+  const showRawError = useCallback((text: string) => {
+    errorMsg.current = null
+    setError(text)
+  }, [])
 
   const persistPrefs = useCallback((next: UpdatePreferences) => {
     saveUpdatePreferences(next)
@@ -121,31 +165,33 @@ export function useAppUpdateManager(opts?: {
     const merged = { ...info, downloaded }
     setLastUpdate(merged)
     if (!info.hasUpdate) {
-      setStatus(`Up to date (v${info.currentVersion || '?'})`)
+      showStatus('update.status.upToDate', { version: info.currentVersion || '?' })
       return merged
     }
-    setStatus(
-      downloaded
-        ? `Update v${info.latestVersion} downloaded`
-        : `Update available: v${info.latestVersion}`,
+    showStatus(
+      downloaded ? 'update.status.downloaded' : 'update.status.available',
+      { version: info.latestVersion },
     )
     return merged
-  }, [])
+  }, [showStatus])
 
   const checkForUpdates = useCallback(async (silent: boolean) => {
     if (checkInFlight.current) return null
     checkInFlight.current = true
     if (!silent) {
       setBusy(true)
-      setError('')
-      setStatus('Checking…')
+      showError(null)
+      showStatus('update.status.checking')
     }
     try {
       const res = (await (silent ? CheckForUpdatesSilently() : CheckForUpdates())) as QueryResult
       if (!res?.success) {
         if (!silent) {
-          setError(res?.message || 'Check failed')
-          setStatus(`Check failed: ${res?.message || 'unknown'}`)
+          if (res?.message) showRawError(res.message)
+          else showError('update.error.checkFailed')
+          showStatus('update.error.checkFailedDetail', {
+            message: res?.message || t('update.error.unknown'),
+          })
         }
         return null
       }
@@ -162,21 +208,22 @@ export function useAppUpdateManager(opts?: {
       return merged
     } catch (e) {
       if (!silent) {
-        setError(String(e))
-        setStatus(`Check failed: ${String(e)}`)
+        showRawError(String(e))
+        showStatus('update.error.checkFailedDetail', { message: String(e) })
       }
       return null
     } finally {
       checkInFlight.current = false
       if (!silent) setBusy(false)
     }
-  }, [applyUpdateInfo])
+  }, [applyUpdateInfo, showError, showRawError, showStatus, t])
 
   const downloadUpdate = useCallback(async () => {
     if (downloadInFlight.current || !lastUpdate?.hasUpdate) return
     downloadInFlight.current = true
     setBusy(true)
-    setError('')
+    showError(null)
+    progressMsg.current = null
     setProgress({
       open: true,
       version: lastUpdate.latestVersion,
@@ -192,17 +239,28 @@ export function useAppUpdateManager(opts?: {
         const cancelled =
           /cancel/i.test(res?.message || '')
           || false
-        setError(cancelled ? '' : (res?.message || 'Download failed'))
+        if (cancelled) {
+          showError(null)
+        } else if (res?.message) {
+          showRawError(res.message)
+        } else {
+          showError('update.error.downloadFailed')
+        }
+        const failureKey: TranslationKey = cancelled
+          ? 'update.error.downloadCancelled'
+          : 'update.error.downloadFailed'
+        progressMsg.current = res?.message ? null : { key: failureKey }
         setProgress((p) => ({
           ...p,
           open: true,
           status: cancelled || p.status === 'cancelled' ? 'cancelled' : 'error',
-          message: res?.message || (cancelled ? 'Download cancelled' : 'Download failed'),
+          message: res?.message || t(failureKey),
         }))
         return
       }
       const data = (res.data || {}) as { downloadPath?: string; info?: UpdateInfo }
       downloadedVersionRef.current = lastUpdate.latestVersion
+      progressMsg.current = null
       setProgress((p) => ({
         ...p,
         status: 'done',
@@ -217,93 +275,103 @@ export function useAppUpdateManager(opts?: {
         downloadPath: data.downloadPath || lastUpdate.downloadPath,
       })
     } catch (e) {
-      setError(String(e))
+      showRawError(String(e))
+      progressMsg.current = null
       setProgress((p) => ({ ...p, open: true, status: 'error', message: String(e) }))
     } finally {
       downloadInFlight.current = false
       setBusy(false)
     }
-  }, [applyUpdateInfo, lastUpdate])
+  }, [applyUpdateInfo, lastUpdate, showError, showRawError, t])
 
   const pauseDownload = useCallback(async () => {
     try {
       const res = (await PauseUpdateDownload()) as QueryResult
       if (!res?.success) {
-        setError(res?.message || 'Pause failed')
+        if (res?.message) showRawError(res.message)
+        else showError('update.error.pauseFailed')
         return
       }
       setProgress((p) => ({ ...p, open: true, status: 'paused' }))
     } catch (e) {
-      setError(String(e))
+      showRawError(String(e))
     }
-  }, [])
+  }, [showError, showRawError])
 
   const resumeDownload = useCallback(async () => {
     try {
       const res = (await ResumeUpdateDownload()) as QueryResult
       if (!res?.success) {
-        setError(res?.message || 'Resume failed')
+        if (res?.message) showRawError(res.message)
+        else showError('update.error.resumeFailed')
         return
       }
       setProgress((p) => ({ ...p, open: true, status: 'downloading' }))
     } catch (e) {
-      setError(String(e))
+      showRawError(String(e))
     }
-  }, [])
+  }, [showError, showRawError])
 
   const cancelDownload = useCallback(async () => {
     try {
       const res = (await CancelUpdateDownload()) as QueryResult
       if (!res?.success) {
-        setError(res?.message || 'Cancel failed')
+        if (res?.message) showRawError(res.message)
+        else showError('update.error.cancelFailed')
         return
       }
+      progressMsg.current = res?.message ? null : { key: 'update.error.downloadCancelled' }
       setProgress((p) => ({
         ...p,
         open: true,
         status: 'cancelled',
-        message: res?.message || 'Download cancelled',
+        message: res?.message || t('update.error.downloadCancelled'),
       }))
     } catch (e) {
-      setError(String(e))
+      showRawError(String(e))
     }
-  }, [])
+  }, [showError, showRawError, t])
 
   const installUpdate = useCallback(async () => {
     setBusy(true)
-    setError('')
+    showError(null)
     try {
       if (onBeforeInstallRef.current) {
         await onBeforeInstallRef.current()
       }
       const res = (await InstallUpdateAndRestart()) as QueryResult
       if (!res?.success) {
-        setError(res?.message || 'Install failed')
+        if (res?.message) showRawError(res.message)
+        else showError('update.error.installFailed')
         return
       }
-      setStatus(res.message || 'Installer started')
+      if (res.message) showRawStatus(res.message)
+      else showStatus('update.status.installerStarted')
       setProgress((p) => ({ ...p, open: false }))
     } catch (e) {
-      setError(String(e))
+      showRawError(String(e))
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [showError, showRawError, showRawStatus, showStatus])
 
   const openDownloadedPackage = useCallback(async () => {
     try {
       const res = (await OpenDownloadedUpdatePackage()) as QueryResult
-      if (!res?.success) setError(res?.message || 'Could not open package')
+      if (!res?.success) {
+        if (res?.message) showRawError(res.message)
+        else showError('update.error.openPackageFailed')
+      }
     } catch (e) {
-      setError(String(e))
+      showRawError(String(e))
     }
-  }, [])
+  }, [showError, showRawError])
 
   const skipThisVersion = useCallback(() => {
     if (!lastUpdate?.latestVersion) return
     persistPrefs({ ...prefs, skippedVersion: lastUpdate.latestVersion })
-    setStatus(`Skipped v${lastUpdate.latestVersion}`)
-  }, [lastUpdate, persistPrefs, prefs])
+    showStatus('update.status.skipped', { version: lastUpdate.latestVersion })
+  }, [lastUpdate, persistPrefs, prefs, showStatus])
 
   const setAutoPrompt = useCallback((enabled: boolean) => {
     persistPrefs({ ...prefs, autoPromptEnabled: enabled })
@@ -311,14 +379,14 @@ export function useAppUpdateManager(opts?: {
 
   useEffect(() => {
     void refreshAppInfo()
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       void checkForUpdates(true)
     }, 2000)
     const interval = window.setInterval(() => {
       void checkForUpdates(true)
     }, 30 * 60 * 1000)
     return () => {
-      window.clearTimeout(t)
+      window.clearTimeout(timer)
       window.clearInterval(interval)
     }
   }, [checkForUpdates, refreshAppInfo])
@@ -334,6 +402,13 @@ export function useAppUpdateManager(opts?: {
       setProgress((prev) => {
         const status = (payload?.status as DownloadProgress['status']) || prev.status
         const forceOpen = status === 'done' || status === 'error' || status === 'cancelled'
+        const message = payload?.message
+          || (status === 'cancelled' ? t('update.error.downloadCancelled') : prev.message)
+        progressMsg.current = payload?.message
+          ? null
+          : status === 'cancelled'
+            ? { key: 'update.error.downloadCancelled' }
+            : progressMsg.current
         return {
           ...prev,
           // Respect Hide while downloading; reopen only for terminal states.
@@ -342,11 +417,23 @@ export function useAppUpdateManager(opts?: {
           percent: typeof payload?.percent === 'number' ? payload.percent : prev.percent,
           downloaded: typeof payload?.downloaded === 'number' ? payload.downloaded : prev.downloaded,
           total: typeof payload?.total === 'number' && payload.total > 0 ? payload.total : prev.total,
-          message: payload?.message || (status === 'cancelled' ? 'Download cancelled' : prev.message),
+          message,
         }
       })
     })
-  }, [])
+  }, [t])
+
+  // Re-render status / error / progress text kept in state after a language switch.
+  useEffect(() => {
+    const statusDescriptor = statusMsg.current
+    if (statusDescriptor) setStatus(t(statusDescriptor.key, statusDescriptor.params))
+    const errorDescriptor = errorMsg.current
+    if (errorDescriptor) setError(t(errorDescriptor.key, errorDescriptor.params))
+    const progressDescriptor = progressMsg.current
+    if (progressDescriptor) {
+      setProgress((p) => ({ ...p, message: t(progressDescriptor.key, progressDescriptor.params) }))
+    }
+  }, [t])
 
   const canInstall = Boolean(lastUpdate?.hasUpdate)
     && (Boolean(lastUpdate?.downloaded) || downloadedVersionRef.current === lastUpdate?.latestVersion)

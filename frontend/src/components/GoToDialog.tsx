@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '../i18n'
 import { useAppSettings } from '../settings/AppSettingsContext'
 import './GoToDialog.css'
 
 export function GoToDialog() {
+  const t = useT()
   const { goToOpen, closeGoTo, goToTarget } = useAppSettings()
   const [draft, setDraft] = useState('1')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -19,8 +21,8 @@ export function GoToDialog() {
 
   if (!goToOpen || !goToTarget) return null
 
-  const label = goToTarget.kind === 'page' ? 'Page' : 'Line'
-  const title = goToTarget.kind === 'page' ? 'Go to page' : 'Go to line'
+  const label = goToTarget.kind === 'page' ? t('dialogs.goTo.page') : t('dialogs.goTo.line')
+  const title = goToTarget.kind === 'page' ? t('dialogs.goTo.goToPage') : t('dialogs.goTo.goToLine')
 
   const submit = () => {
     const n = Math.min(
@@ -43,7 +45,7 @@ export function GoToDialog() {
         <div className="goto-title">{title}</div>
         <label className="goto-label">
           {label}
-          {goToTarget.max > 0 ? ` (1–${goToTarget.max})` : ''}
+          {goToTarget.max > 0 ? t('dialogs.goTo.range', { max: goToTarget.max }) : ''}
           <input
             ref={inputRef}
             className="goto-input"
@@ -64,10 +66,10 @@ export function GoToDialog() {
         </label>
         <div className="goto-actions">
           <button type="button" className="toolbar-btn" onClick={closeGoTo}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button type="button" className="toolbar-btn primary" onClick={submit}>
-            OK
+            {t('common.ok')}
           </button>
         </div>
       </div>

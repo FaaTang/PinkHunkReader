@@ -5,6 +5,8 @@ import {app} from '../models';
 
 export function AddRoot(arg1:string):Promise<void>;
 
+export function CancelUpdateDownload():Promise<define.QueryResult>;
+
 export function CheckForUpdates():Promise<define.QueryResult>;
 
 export function CheckForUpdatesSilently():Promise<define.QueryResult>;
@@ -15,19 +17,11 @@ export function CountLines(arg1:string):Promise<number>;
 
 export function DetectKind(arg1:string):Promise<string>;
 
-export function CancelUpdateDownload():Promise<define.QueryResult>;
-
 export function DownloadUpdate():Promise<define.QueryResult>;
 
 export function FileExists(arg1:string):Promise<boolean>;
 
 export function FindLikelyRenamedFile(arg1:string,arg2:number):Promise<string>;
-
-export function SyncWatchedFiles(arg1:Array<string>):Promise<void>;
-
-export function PauseUpdateDownload():Promise<define.QueryResult>;
-
-export function ResumeUpdateDownload():Promise<define.QueryResult>;
 
 export function GetAppInfo():Promise<define.QueryResult>;
 
@@ -63,6 +57,8 @@ export function OpenDownloadedUpdatePackage():Promise<define.QueryResult>;
 
 export function OpenRoot(arg1:string):Promise<void>;
 
+export function PauseUpdateDownload():Promise<define.QueryResult>;
+
 export function PickAndOpen(arg1:string):Promise<define.PickOpenResult>;
 
 export function PickAndOpenFile():Promise<string>;
@@ -85,6 +81,8 @@ export function RegisterWindow(arg1:string):Promise<void>;
 
 export function RemoveRoot(arg1:string):Promise<void>;
 
+export function ResumeUpdateDownload():Promise<define.QueryResult>;
+
 export function RevealInFileManager(arg1:string):Promise<void>;
 
 export function SaveEditorPrefs(arg1:define.EditorPrefs):Promise<define.EditorPrefs>;
@@ -99,11 +97,15 @@ export function SaveWindowSession(arg1:define.WindowSessionState):Promise<void>;
 
 export function SetRoots(arg1:Array<string>):Promise<void>;
 
+export function SetUILanguage(arg1:string):Promise<void>;
+
 export function SpawnNewWindow(arg1:string,arg2:boolean):Promise<string>;
 
 export function SpawnRestoredWindows():Promise<void>;
 
 export function StatFile(arg1:string):Promise<define.FileInfo>;
+
+export function SyncWatchedFiles(arg1:Array<string>):Promise<void>;
 
 export function UnregisterWindow(arg1:string):Promise<void>;
 

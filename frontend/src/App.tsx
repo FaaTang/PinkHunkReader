@@ -35,6 +35,7 @@ import {
 } from './settings/openPlacement'
 import { eventMatchesShortcut, formatShortcut } from './settings/shortcuts'
 import type { FileInfo, OpenTab } from './types'
+import { t as translate, useT } from './i18n'
 import { getActiveTextEditor } from './utils/activeTextEditor'
 import { isJsonTab, toggleJsonFormat } from './utils/jsonFormat'
 import {
@@ -227,12 +228,24 @@ function loadExplorerWidth(): number {
 }
 
 function AppShell() {
+  const t = useT()
   const [roots, setRoots] = useState<string[]>([])
   const [windowId, setWindowId] = useState('')
   const [tabs, setTabs] = useState<OpenTab[]>([])
   const [activePath, setActivePath] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [status, setStatus] = useState('Open a folder or file to start')
+  const [status, setStatus] = useState(() => translate('app.status.opening'))
+  // Retranslate the idle status line when the UI language changes; statuses that
+  // describe a past action keep the language they were produced in.
+  const idleStatusRef = useRef<string | null>(null)
+  useEffect(() => {
+    const idle = t('app.status.opening')
+    // Capture the previous idle text before the ref advances; the state updater
+    // may run after this effect body finishes.
+    const previousIdle = idleStatusRef.current
+    setStatus((current) => (previousIdle === null || current === previousIdle ? idle : current))
+    idleStatusRef.current = idle
+  }, [t])
   const [savePhase, setSavePhase] = useState<'idle' | 'manual' | 'auto'>('idle')
   const [treeRefresh, setTreeRefresh] = useState(0)
   const [treeHiddenPaths, setTreeHiddenPaths] = useState<string[]>([])
@@ -529,20 +542,20 @@ function AppShell() {
       let contentError = ''
 
       if (info.kind === 'pdf' || info.kind === 'image' || info.kind === 'word' || info.kind === 'excel') {
-        setStatus(`${info.name} · ${(info.size / 1024).toFixed(1)} KB`)
+        setStatus(translate('app.status.fileSize', { name: info.name, size: (info.size / 1024).toFixed(1) }))
       } else if (info.largeMode) {
-        setStatus(`${info.name} · paged (viewport × 2)`)
+        setStatus(translate('app.status.filePaged', { name: info.name }))
       } else if (info.editable || info.kind === 'markdown' || info.kind === 'text') {
         try {
           content = await ReadText(path)
-          setStatus(`${info.name} · ${(info.size / 1024).toFixed(1)} KB`)
+          setStatus(translate('app.status.fileSize', { name: info.name, size: (info.size / 1024).toFixed(1) }))
         } catch (e) {
           // Still open the tab so shell / drag-open is not "explorer only".
           contentError = String(e)
-          setStatus(`${info.name} · failed to load content`)
+          setStatus(translate('app.status.loadFailed', { name: info.name }))
         }
       } else {
-        setStatus(`${info.name} · unsupported type`)
+        setStatus(translate('app.status.unsupported', { name: info.name }))
       }
 
       const tab: OpenTab = {
@@ -673,7 +686,7 @@ function AppShell() {
     setTabs(restored)
     const active = restored.find((t) => t.path === session.activePath)?.path ?? restored[0].path
     setActivePath(active)
-    setStatus(`Restored ${restored.length} tab${restored.length === 1 ? '' : 's'}`)
+    setStatus(translate(restored.length === 1 ? 'app.status.restoredOne' : 'app.status.restoredMany', { count: restored.length }))
   }, [restoreTabsFromSession])
 
   // First-open size + center: only empty primary start (Go applyFirstOpenGeometry).
@@ -804,13 +817,13 @@ function AppShell() {
     if (choice === 'new') {
       await SpawnNewWindow(path, isDir)
       rememberRecent(path, isDir)
-      setStatus(`Opened in new window · ${label}`)
+      setStatus(translate('app.status.openedInNewWindow', { label }))
       return
     }
     if (isDir) {
       await ensureRoot(path)
       rememberRecent(path, true)
-      setStatus(`Opened folder · ${label}`)
+      setStatus(translate('app.status.openedFolder', { label }))
       return
     }
     if (!pathUnderAnyRoot(path, rootsRef.current)) {
@@ -853,7 +866,7 @@ function AppShell() {
         }
       }
       if (!items.length) {
-        setError('No valid files or folders to open')
+        setError(translate('app.error.noOpenablePaths'))
         return
       }
       // One path: identical to openPicked after PickAndOpen.
@@ -862,7 +875,7 @@ function AppShell() {
         return
       }
       // Several paths (multi-drop): ask placement once, then reuse openPathWithChoice.
-      const summary = `${items.length} items`
+      const summary = translate('app.dialog.itemsLabel', { count: items.length })
       const choice = await resolveOpenPlacement(summary)
       if (choice === 'cancel') return
       const needsParentAsk =
@@ -878,7 +891,7 @@ function AppShell() {
         await openPathWithChoice(item.path, item.isDir, choice, parentFolderChoice)
       }
       if (choice === 'current') {
-        setStatus(`Opened ${items.length} items`)
+        setStatus(translate('app.status.openedItems', { count: items.length }))
       }
     } catch (e) {
       setError(String(e))
@@ -925,7 +938,7 @@ function AppShell() {
     try {
       const probed = await InspectPath(path)
       if (!probed?.path) {
-        setError('Path not found')
+        setError(translate('app.error.pathNotFound'))
         return
       }
       if (probed.isDir) {
@@ -962,7 +975,7 @@ function AppShell() {
     if (active instanceof HTMLElement) active.blur()
     setTabs((prev) => [...prev, tab])
     setActivePath(path)
-    setStatus(`New file · ${tab.name}`)
+    setStatus(translate('app.status.newFile', { name: tab.name }))
   }, [])
 
   const updateTabContent = useCallback((path: string, content: string) => {
@@ -1021,13 +1034,13 @@ function AppShell() {
         )
         setActivePath(info.path)
         rememberRecent(info.path)
-        setStatus(`Saved ${info.name}`)
+        setStatus(translate('app.status.saved', { name: info.name }))
         setTreeRefresh((x) => x + 1)
         return true
       }
       if (tab.largeMode) {
         const savePaged = pagedSaveByPathRef.current.get(tab.path)
-        if (!savePaged) throw new Error('Paged editor is not ready')
+        if (!savePaged) throw new Error(translate('app.error.pagedEditorNotReady'))
         await savePaged()
       } else {
         await WriteText(tab.path, tab.content)
@@ -1036,7 +1049,11 @@ function AppShell() {
         prev.map((t) => (t.path === tab.path ? { ...t, dirty: false, orphan: false } : t)),
       )
       missingPromptedRef.current.delete(tab.path)
-      setStatus(reason === 'auto' ? `Auto-saved ${tab.name}` : `Saved ${tab.name}`)
+      setStatus(
+        reason === 'auto'
+          ? translate('app.status.autoSaved', { name: tab.name })
+          : translate('app.status.saved', { name: tab.name }),
+      )
       return true
     } catch (e) {
       setError(String(e))
@@ -1083,9 +1100,9 @@ function AppShell() {
         lastName = latest.name
       }
       if (saved === 1) {
-        setStatus(`Auto-saved ${lastName}`)
+        setStatus(translate('app.status.autoSaved', { name: lastName }))
       } else if (saved > 1) {
-        setStatus(`Auto-saved ${saved} files`)
+        setStatus(translate('app.status.autoSavedMany', { count: saved }))
       }
     } finally {
       setSavePhase('idle')
@@ -1128,7 +1145,7 @@ function AppShell() {
     }
     setTreeRefresh((n) => n + 1)
     await openFile(newPath)
-    setStatus(`Reloaded as ${folderLabel(newPath)}`)
+    setStatus(translate('app.status.reloadedAs', { name: folderLabel(newPath) }))
     setError('')
   }, [openFile])
 
@@ -1163,10 +1180,10 @@ function AppShell() {
           t.path === oldPath ? { ...t, orphan: true, dirty: true } : t,
         ),
       )
-      setStatus(`Kept ${tab.name} (renamed on disk)`)
+      setStatus(translate('app.status.keptRenamed', { name: tab.name }))
     } else {
       removeTab(oldPath)
-      setStatus(`Closed ${tab.name} (renamed on disk)`)
+      setStatus(translate('app.status.closedRenamed', { name: tab.name }))
     }
   }, [askReloadRenamed, removeTab, retargetTabAfterRename])
 
@@ -1252,10 +1269,10 @@ function AppShell() {
                 t.path === tab.path ? { ...t, orphan: true, dirty: true } : t,
               ),
             )
-            setStatus(`Kept ${tab.name} (renamed on disk)`)
+            setStatus(translate('app.status.keptRenamed', { name: tab.name }))
           } else {
             removeTab(tab.path)
-            setStatus(`Closed ${tab.name} (renamed on disk)`)
+            setStatus(translate('app.status.closedRenamed', { name: tab.name }))
           }
           continue
         }
@@ -1268,10 +1285,10 @@ function AppShell() {
               t.path === tab.path ? { ...t, orphan: true, dirty: true } : t,
             ),
           )
-          setStatus(`Kept ${tab.name} (missing on disk)`)
+          setStatus(translate('app.status.keptMissing', { name: tab.name }))
         } else {
           removeTab(tab.path)
-          setStatus(`Closed ${tab.name} (source missing)`)
+          setStatus(translate('app.status.closedMissing', { name: tab.name }))
         }
       }
     } finally {
@@ -1402,9 +1419,9 @@ function AppShell() {
       setStatus(
         remainingRoots.length
           ? total === 1
-            ? `Removed ${folderLabel(selected[0])} from workspace`
-            : `Removed ${total} items from workspace`
-          : 'No workspace',
+            ? translate('app.status.removedFolder', { name: folderLabel(selected[0]) })
+            : translate('app.status.removedItems', { count: total })
+          : translate('app.status.noWorkspace'),
       )
     } catch (e) {
       setError(String(e))
@@ -1441,7 +1458,7 @@ function AppShell() {
       setRoots([])
       setTreeHiddenPaths([])
       setTreeRefresh((n) => n + 1)
-      setStatus('No workspace')
+      setStatus(translate('app.status.noWorkspace'))
     } catch (e) {
       setError(String(e))
     }
@@ -1466,7 +1483,11 @@ function AppShell() {
             : t,
         ),
       )
-      setStatus(result.mode === 'pretty' ? 'JSON selection formatted' : 'JSON selection compacted')
+      setStatus(
+        result.mode === 'pretty'
+          ? translate('app.status.jsonSelectionFormatted')
+          : translate('app.status.jsonSelectionCompacted'),
+      )
       setError('')
       return
     }
@@ -1483,7 +1504,11 @@ function AppShell() {
           : t,
       ),
     )
-    setStatus(result.mode === 'pretty' ? 'JSON formatted' : 'JSON compacted')
+    setStatus(
+      result.mode === 'pretty'
+        ? translate('app.status.jsonFormatted')
+        : translate('app.status.jsonCompacted'),
+    )
     setError('')
   }, [activePath, activeTab])
 
@@ -1495,7 +1520,7 @@ function AppShell() {
   const locateInExplorer = useCallback((path: string) => {
     if (!path || path.startsWith('untitled:')) return
     if (!pathUnderAnyRoot(path, rootsRef.current)) {
-      setStatus('File is not in the current workspace')
+      setStatus(translate('app.status.notInWorkspace'))
       return
     }
     setExplorerOpen(true)
@@ -1515,8 +1540,8 @@ function AppShell() {
       }
       setStatus(
         list.length === 1
-          ? `Opened in file manager · ${folderLabel(list[0])}`
-          : `Opened ${list.length} items in file manager`,
+          ? translate('app.status.revealed', { name: folderLabel(list[0]) })
+          : translate('app.status.revealedMany', { count: list.length }),
       )
       setError('')
     } catch (e) {
@@ -1538,21 +1563,21 @@ function AppShell() {
     setTreeHiddenPaths([])
     setTreeRefresh((n) => n + 1)
     if (!activePath) {
-      setStatus('Explorer refreshed')
+      setStatus(translate('app.status.explorerRefreshed'))
       return
     }
     const tab = tabs.find((t) => t.path === activePath)
     if (!tab || tab.untitled) {
-      setStatus('Explorer refreshed')
+      setStatus(translate('app.status.explorerRefreshed'))
       return
     }
     // Active file no longer under any workspace root — tree refresh only.
     if (!pathUnderAnyRoot(tab.path, nextRoots)) {
-      setStatus('Explorer refreshed')
+      setStatus(translate('app.status.explorerRefreshed'))
       return
     }
     if (tab.orphan) {
-      setStatus('Explorer refreshed')
+      setStatus(translate('app.status.explorerRefreshed'))
       void checkMissingSources()
       return
     }
@@ -1565,16 +1590,16 @@ function AppShell() {
       const exists = await FileExists(activePath)
       if (!exists) {
         void checkMissingSources()
-        setStatus('Explorer refreshed')
+        setStatus(translate('app.status.explorerRefreshed'))
         return
       }
       setTabs((prev) => prev.filter((t) => t.path !== activePath))
       setActivePath(null)
       await openFile(activePath)
-      setStatus(`Refreshed ${tab.name}`)
+      setStatus(translate('app.status.refreshedFile', { name: tab.name }))
     } catch (e) {
       setError(String(e))
-      setStatus('Explorer refreshed')
+      setStatus(translate('app.status.explorerRefreshed'))
     }
   }, [activePath, askCloseSave, checkMissingSources, openFile, saveTab, tabs])
 
@@ -1860,7 +1885,7 @@ function AppShell() {
   const hasWorkspace = roots.length > 0 || tabs.length > 0
   const rootsSummary = roots.length
     ? roots.map(folderLabel).join(' · ')
-    : 'No workspace'
+    : translate('app.status.noWorkspace')
   const locatablePaths = useMemo(
     () => tabs.filter((t) => !t.untitled && pathUnderAnyRoot(t.path, roots)).map((t) => t.path),
     [tabs, roots],
@@ -1883,9 +1908,9 @@ function AppShell() {
           type="button"
           className={`toolbar-btn${explorerOpen ? ' active-toggle' : ''}`}
           onClick={() => setExplorerOpen((o) => !o)}
-          title={`${explorerOpen ? 'Hide explorer' : 'Show explorer'} (${formatShortcut(shortcuts.toggleExplorer)})`}
+          title={`${explorerOpen ? t('app.toolbar.explorerToggleTitleHide') : t('app.toolbar.explorerToggleTitle')} (${formatShortcut(shortcuts.toggleExplorer)})`}
         >
-          {explorerOpen ? 'Hide explorer' : 'Explorer'}
+          {explorerOpen ? t('app.toolbar.explorerHide') : t('app.toolbar.explorerShow')}
         </button>
         {activeTab?.editable ? (
           <button
@@ -1895,13 +1920,13 @@ function AppShell() {
             onClick={() => void saveActive()}
             title={
               savePhase === 'auto'
-                ? 'Auto-saving…'
+                ? t('app.toolbar.autoSaving')
                 : savePhase === 'manual'
-                  ? 'Saving…'
-                  : `Save (${formatShortcut(shortcuts.save)})`
+                  ? t('app.toolbar.saving')
+                  : t('app.toolbar.saveTitle', { shortcut: formatShortcut(shortcuts.save) })
             }
           >
-            {savePhase === 'auto' ? 'Auto-saving…' : savePhase === 'manual' ? 'Saving…' : 'Save'}
+            {savePhase === 'auto' ? t('app.toolbar.autoSaving') : savePhase === 'manual' ? t('app.toolbar.saving') : t('common.save')}
           </button>
         ) : null}
         {showJsonFormat ? (
@@ -1909,43 +1934,43 @@ function AppShell() {
             type="button"
             className="toolbar-btn"
             onClick={formatActiveJson}
-            title={`Format / minify JSON (${formatShortcut(shortcuts.formatJson)})`}
+            title={t('app.toolbar.formatJsonTitle', { shortcut: formatShortcut(shortcuts.formatJson) })}
           >
-            Format JSON
+            {t('app.toolbar.formatJson')}
           </button>
         ) : null}
         <button
           type="button"
           className="toolbar-btn"
           onClick={() => void toggleFullscreen()}
-          title={`Full screen (${formatShortcut(shortcuts.fullscreen)})`}
+          title={t('app.toolbar.fullScreenTitle', { shortcut: formatShortcut(shortcuts.fullscreen) })}
         >
-          {fullscreen ? 'Exit full screen' : 'Full screen'}
+          {fullscreen ? t('app.toolbar.exitFullScreen') : t('app.toolbar.fullScreen')}
         </button>
         <button
           type="button"
           className="toolbar-btn"
           onClick={() => openSettings()}
-          title={`Settings (${formatShortcut(shortcuts.settings)})`}
+          title={t('app.toolbar.settingsTitle', { shortcut: formatShortcut(shortcuts.settings) })}
         >
-          Settings
+          {t('common.settings')}
         </button>
         {!update.progress.open && update.progress.status !== 'idle' ? (
           <button
             type="button"
             className="toolbar-btn primary"
             onClick={update.showProgress}
-            title="Show update download progress"
+            title={t('app.toolbar.updateProgressTitle')}
           >
             {update.progress.status === 'done'
-              ? 'Update ready'
+              ? t('app.toolbar.updateReady')
               : update.progress.status === 'error'
-                ? 'Download failed'
+                ? t('app.toolbar.downloadFailed')
                 : update.progress.status === 'cancelled'
-                  ? 'Download cancelled'
+                  ? t('app.toolbar.downloadCancelled')
                   : update.progress.status === 'paused'
-                    ? `Paused… ${Math.round(update.progress.percent)}%`
-                    : `Downloading… ${Math.round(update.progress.percent)}%`}
+                    ? t('app.toolbar.downloadPaused', { percent: Math.round(update.progress.percent) })
+                    : t('app.toolbar.downloading', { percent: Math.round(update.progress.percent) })}
           </button>
         ) : null}
         <div className="root-path" title={roots.join('\n')}>{rootsSummary}</div>
@@ -1962,11 +1987,11 @@ function AppShell() {
           }}
         >
           <div className="sidebar-title">
-            <span className="sidebar-title-text">Explorer</span>
+            <span className="sidebar-title-text">{t('app.sidebar.title')}</span>
             <button
               type="button"
               className="sidebar-refresh"
-              title="Remove all folders"
+              title={t('app.sidebar.removeAll')}
               disabled={!roots.length}
               onClick={() => void removeAllFromWorkspace()}
             >
@@ -1975,7 +2000,7 @@ function AppShell() {
             <button
               type="button"
               className="sidebar-refresh"
-              title="Refresh"
+              title={t('common.refresh')}
               disabled={!roots.length}
               onClick={() => void refreshWorkspace()}
             >
@@ -2004,14 +2029,14 @@ function AppShell() {
                 />
               </div>
               <div className="sidebar-drop-hint sidebar-drop-hint-footer">
-                Drop files or folders here to open
+                {t('app.sidebar.dropHint')}
               </div>
             </>
           ) : (
             <div className="sidebar-drop-hint">
-              <div className="sidebar-drop-hint-title">Drop files or folders here</div>
+              <div className="sidebar-drop-hint-title">{t('app.sidebar.dropHintTitle')}</div>
               <div className="sidebar-drop-hint-sub">
-                Or use File → Open / Open Folder
+                {t('app.sidebar.dropHintSub')}
               </div>
             </div>
           )}
@@ -2019,8 +2044,8 @@ function AppShell() {
             className="sidebar-resize-handle"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize explorer"
-            title="Drag to resize explorer"
+            aria-label={t('app.sidebar.resize')}
+            title={t('app.sidebar.resizeDrag')}
             onPointerDown={onExplorerResizePointerDown}
             onPointerMove={onExplorerResizePointerMove}
             onPointerUp={endExplorerResize}
@@ -2033,14 +2058,14 @@ function AppShell() {
             <div className="empty" style={{ ['--wails-drop-target' as string]: 'drop' }}>
               <img src={logo} width={64} height={64} alt="" style={{ borderRadius: 14 }} />
               <h2>PinkHunkReader</h2>
-              <div>Browse folders · Markdown live preview · PDF / images</div>
+              <div>{t('app.empty.tagline')}</div>
               <OpenMenu
                 onOpenFile={() => void openPicked('file')}
                 onOpenFolder={() => void openPicked('folder')}
                 onOpenRecent={(p) => void openRecent(p)}
                 onNewFile={newFile}
               />
-              <div className="empty-drop-hint">Drop files or folders here to open</div>
+              <div className="empty-drop-hint">{t('app.sidebar.dropHint')}</div>
             </div>
           ) : (
             <>
@@ -2080,7 +2105,7 @@ function AppShell() {
                 </div>
               ) : (
                 <div className="empty">
-                  <div>Select a file from the explorer or create a new file</div>
+                  <div>{t('app.empty.selectFile')}</div>
                 </div>
               )}
             </>
@@ -2090,10 +2115,10 @@ function AppShell() {
 
       <footer className="status">
         <span>{status}</span>
-        {activeTab?.dirty ? <span style={{ color: 'var(--ph-accent)' }}>Unsaved</span> : null}
-        {activeTab?.untitled ? <span>Untitled</span> : null}
-        {activeTab?.orphan ? <span style={{ color: 'var(--ph-accent)' }}>Missing on disk</span> : null}
-        {activeTab?.largeMode ? <span>Paged</span> : null}
+        {activeTab?.dirty ? <span style={{ color: 'var(--ph-accent)' }}>{t('app.status.unsaved')}</span> : null}
+        {activeTab?.untitled ? <span>{t('app.status.untitled')}</span> : null}
+        {activeTab?.orphan ? <span style={{ color: 'var(--ph-accent)' }}>{t('app.status.missingOnDisk')}</span> : null}
+        {activeTab?.largeMode ? <span>{t('app.status.paged')}</span> : null}
       </footer>
 
       {fullscreen ? (
@@ -2101,9 +2126,12 @@ function AppShell() {
           type="button"
           className="fs-exit-fab"
           onClick={() => exitFullscreen()}
-          title={`Exit full screen (${formatShortcut(shortcuts.fullscreen)} / ${formatShortcut(shortcuts.exitFullscreen)})`}
+          title={t('app.toolbar.exitFullScreenFabTitle', {
+            shortcut: formatShortcut(shortcuts.fullscreen),
+            shortcutAlt: formatShortcut(shortcuts.exitFullscreen),
+          })}
         >
-          Exit full screen · {formatShortcut(shortcuts.fullscreen)}
+          {t('app.toolbar.exitFullScreenFab', { shortcut: formatShortcut(shortcuts.fullscreen) })}
         </button>
       ) : null}
 
@@ -2115,14 +2143,14 @@ function AppShell() {
       />
       <ConfirmDialog
         open={removeAllPrompt}
-        title="Remove all folders?"
-        message="Remove every folder from the Explorer workspace? Open tabs under those folders will be closed."
+        title={t('app.confirm.removeAllTitle')}
+        message={t('app.confirm.removeAllMessage')}
         onChoice={handleRemoveAllPrompt}
       />
       <ConfirmDialog
         open={cancelDownloadPrompt}
-        title="Cancel download?"
-        message="Stop downloading this update? You can download again later from Settings → About."
+        title={t('app.confirm.cancelDownloadTitle')}
+        message={t('app.confirm.cancelDownloadMessage')}
         onChoice={(choice) => {
           setCancelDownloadPrompt(false)
           if (choice === 'confirm') void update.cancelDownload()

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ReadBytes } from '../../wailsjs/go/app/App'
 import { ViewerLoading } from '../components/ViewerLoading'
+import { t, useT } from '../i18n'
 import './viewers.css'
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function ImageView({ path, name }: Props) {
+  const t = useT()
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
 
@@ -43,7 +45,7 @@ export function ImageView({ path, name }: Props) {
 
   return (
     <div className="media-wrap media-wrap-loading-host">
-      <ViewerLoading visible={!url} label="Loading image…" detail={name} />
+      <ViewerLoading visible={!url} label={t('office.image.loading')} detail={name} />
       {url ? <img src={url} alt={name} /> : null}
     </div>
   )
@@ -70,5 +72,5 @@ function toUint8Array(data: unknown): Uint8Array {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
     return out
   }
-  throw new Error('Unable to parse image bytes')
+  throw new Error(t('office.image.parseFailed'))
 }

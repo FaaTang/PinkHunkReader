@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { DetectKind, InspectPath, ListDir } from '../../wailsjs/go/app/App'
+import { useT } from '../i18n'
 import type { DirEntry } from '../types'
 import { folderLabel, parentDir, pathUnderRoot, pathsEqual } from '../utils/pathHelpers'
 import { revealInOsLabel } from '../utils/platform'
@@ -175,6 +176,7 @@ export function FileTree({
   onRevealInOs,
   onRevealResult,
 }: Props) {
+  const t = useT()
   const [groups, setGroups] = useState<RootGroup[]>(() => emptyGroups(roots))
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [flashPath, setFlashPath] = useState<string | null>(null)
@@ -400,7 +402,7 @@ export function FileTree({
     ;(async () => {
       const root = coveringRoot(revealPath, roots)
       if (!root) {
-        onRevealResult?.(false, 'File is not in the current workspace')
+        onRevealResult?.(false, t('tree.reveal.notInWorkspace'))
         return
       }
       try {
@@ -438,7 +440,7 @@ export function FileTree({
           const el = document.querySelector(`[data-tree-path="${cssEscape(revealPath)}"]`)
           el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
         }, 40)
-        onRevealResult?.(true, `Located ${folderLabel(revealPath)}`)
+        onRevealResult?.(true, t('tree.reveal.located', { name: folderLabel(revealPath) }))
         window.setTimeout(() => {
           if (!cancelled) setFlashPath((p) => (pathsEqual(p ?? '', revealPath) ? null : p))
         }, 1600)
@@ -749,7 +751,9 @@ export function FileTree({
               >
                 {revealInOsLabel()}
                 {menuCount > 1 ? (
-                  <span className="tree-context-sub">{menuCount} items</span>
+                  <span className="tree-context-sub">
+                    {t('tree.menu.itemCount', { count: menuCount })}
+                  </span>
                 ) : null}
               </button>
               <button
@@ -762,11 +766,11 @@ export function FileTree({
                   onRemoveFromWorkspace(paths)
                 }}
               >
-                Remove from workspace
+                {t('tree.menu.removeFromWorkspace')}
                 <span className="tree-context-sub">
                   {menuCount === 1
                     ? folderLabel(menu.targets[0])
-                    : `${menuCount} items`}
+                    : t('tree.menu.itemCount', { count: menuCount })}
                 </span>
               </button>
               <button
@@ -778,7 +782,7 @@ export function FileTree({
                   onRemoveAllFromWorkspace()
                 }}
               >
-                Remove all folders
+                {t('tree.menu.removeAllFolders')}
               </button>
             </div>,
             document.body,

@@ -6,6 +6,10 @@ export function AddRoot(arg1) {
   return window['go']['app']['App']['AddRoot'](arg1);
 }
 
+export function CancelUpdateDownload() {
+  return window['go']['app']['App']['CancelUpdateDownload']();
+}
+
 export function CheckForUpdates() {
   return window['go']['app']['App']['CheckForUpdates']();
 }
@@ -26,10 +30,6 @@ export function DetectKind(arg1) {
   return window['go']['app']['App']['DetectKind'](arg1);
 }
 
-export function CancelUpdateDownload() {
-  return window['go']['app']['App']['CancelUpdateDownload']();
-}
-
 export function DownloadUpdate() {
   return window['go']['app']['App']['DownloadUpdate']();
 }
@@ -40,18 +40,6 @@ export function FileExists(arg1) {
 
 export function FindLikelyRenamedFile(arg1, arg2) {
   return window['go']['app']['App']['FindLikelyRenamedFile'](arg1, arg2);
-}
-
-export function SyncWatchedFiles(arg1) {
-  return window['go']['app']['App']['SyncWatchedFiles'](arg1);
-}
-
-export function PauseUpdateDownload() {
-  return window['go']['app']['App']['PauseUpdateDownload']();
-}
-
-export function ResumeUpdateDownload() {
-  return window['go']['app']['App']['ResumeUpdateDownload']();
 }
 
 export function GetAppInfo() {
@@ -122,6 +110,10 @@ export function OpenRoot(arg1) {
   return window['go']['app']['App']['OpenRoot'](arg1);
 }
 
+export function PauseUpdateDownload() {
+  return window['go']['app']['App']['PauseUpdateDownload']();
+}
+
 export function PickAndOpen(arg1) {
   return window['go']['app']['App']['PickAndOpen'](arg1);
 }
@@ -166,6 +158,10 @@ export function RemoveRoot(arg1) {
   return window['go']['app']['App']['RemoveRoot'](arg1);
 }
 
+export function ResumeUpdateDownload() {
+  return window['go']['app']['App']['ResumeUpdateDownload']();
+}
+
 export function RevealInFileManager(arg1) {
   return window['go']['app']['App']['RevealInFileManager'](arg1);
 }
@@ -194,6 +190,10 @@ export function SetRoots(arg1) {
   return window['go']['app']['App']['SetRoots'](arg1);
 }
 
+export function SetUILanguage(arg1) {
+  return window['go']['app']['App']['SetUILanguage'](arg1);
+}
+
 export function SpawnNewWindow(arg1, arg2) {
   return window['go']['app']['App']['SpawnNewWindow'](arg1, arg2);
 }
@@ -204,6 +204,10 @@ export function SpawnRestoredWindows() {
 
 export function StatFile(arg1) {
   return window['go']['app']['App']['StatFile'](arg1);
+}
+
+export function SyncWatchedFiles(arg1) {
+  return window['go']['app']['App']['SyncWatchedFiles'](arg1);
 }
 
 export function UnregisterWindow(arg1) {

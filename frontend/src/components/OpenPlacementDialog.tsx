@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../i18n'
 import './GoToDialog.css'
 
 export type OpenPlacementChoice = 'current' | 'new'
@@ -18,6 +19,7 @@ export function OpenPlacementDialog({
   onChoice,
   onCancel,
 }: Props) {
+  const t = useT()
   const [always, setAlways] = useState(false)
   useEffect(() => {
     if (open) setAlways(false)
@@ -29,13 +31,14 @@ export function OpenPlacementDialog({
         className="goto-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Open placement"
+        aria-label={t('tree.placement.ariaLabel')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="goto-title">Open where?</div>
+        <div className="goto-title">{t('tree.placement.title')}</div>
         <p className="settings-hint" style={{ marginTop: 0, marginBottom: 12 }}>
-          A workspace is already open. Choose how to open
-          {pathLabel ? ` “${pathLabel}”` : ' the selection'}.
+          {pathLabel
+            ? t('tree.placement.bodyWithLabel', { path: pathLabel })
+            : t('tree.placement.bodyNoLabel')}
         </p>
         <label className="goto-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <input
@@ -43,11 +46,11 @@ export function OpenPlacementDialog({
             checked={always}
             onChange={(e) => setAlways(e.target.checked)}
           />
-          <span>Always use this choice</span>
+          <span>{t('tree.dialog.alwaysUse')}</span>
         </label>
         <div className="goto-actions" style={{ justifyContent: 'stretch', flexWrap: 'wrap' }}>
           <button type="button" className="toolbar-btn" onClick={onCancel}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <span style={{ flex: 1 }} />
           <button
@@ -55,14 +58,14 @@ export function OpenPlacementDialog({
             className={`toolbar-btn${defaultTarget === 'new' ? ' primary' : ''}`}
             onClick={() => onChoice('new', always)}
           >
-            New window
+            {t('tree.placement.newWindow')}
           </button>
           <button
             type="button"
             className={`toolbar-btn${defaultTarget === 'current' ? ' primary' : ''}`}
             onClick={() => onChoice('current', always)}
           >
-            Current workspace
+            {t('tree.placement.currentWorkspace')}
           </button>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { useT } from '../i18n'
 import './ViewerLoading.css'
 
 interface Props {
@@ -14,12 +15,8 @@ interface Props {
  * Use for initial open & any wait that would otherwise show an empty void.
  * Do not use for tiny incremental “load more” footers.
  */
-export function ViewerLoading({
-  visible,
-  label = 'Loading…',
-  detail,
-  className,
-}: Props) {
+export function ViewerLoading({ visible, label, detail, className }: Props) {
+  const t = useT()
   if (!visible) return null
   return (
     <div
@@ -30,7 +27,7 @@ export function ViewerLoading({
     >
       <div className="viewer-loading-card">
         <span className="viewer-loading-spinner" aria-hidden />
-        <div className="viewer-loading-label">{label}</div>
+        <div className="viewer-loading-label">{label ?? t('common.loading')}</div>
         {detail ? <div className="viewer-loading-detail">{detail}</div> : null}
       </div>
     </div>

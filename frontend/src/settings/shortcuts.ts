@@ -1,3 +1,4 @@
+import type { TFunction, TranslationKey } from '../i18n'
 import { isApplePlatform } from '../utils/platform'
 
 export type ShortcutId =
@@ -23,18 +24,27 @@ export interface ShortcutBinding {
 
 export type ShortcutMap = Record<ShortcutId, ShortcutBinding>
 
-export const SHORTCUT_LABELS: Record<ShortcutId, string> = {
-  save: 'Save file',
-  newFile: 'New file',
-  open: 'Open',
-  openFolder: 'Open folder',
-  closeTab: 'Close tab',
-  formatJson: 'Format / minify JSON',
-  fullscreen: 'Toggle full screen',
-  goto: 'Go to page / line',
-  exitFullscreen: 'Exit full screen',
-  settings: 'Open settings',
-  toggleExplorer: 'Show / hide explorer',
+/**
+ * User-visible action names, held as translation keys so the UI language can
+ * change without reloading. Resolve with `shortcutLabel(id, t)` or `t(key)`.
+ */
+export const SHORTCUT_LABELS: Record<ShortcutId, TranslationKey> = {
+  save: 'settings.shortcuts.save',
+  newFile: 'settings.shortcuts.newFile',
+  open: 'settings.shortcuts.open',
+  openFolder: 'settings.shortcuts.openFolder',
+  closeTab: 'settings.shortcuts.closeTab',
+  formatJson: 'settings.shortcuts.formatJson',
+  fullscreen: 'settings.shortcuts.fullscreen',
+  goto: 'settings.shortcuts.goto',
+  exitFullscreen: 'settings.shortcuts.exitFullscreen',
+  settings: 'settings.shortcuts.settings',
+  toggleExplorer: 'settings.shortcuts.toggleExplorer',
+}
+
+/** Resolve a shortcut action label in the current UI language. */
+export function shortcutLabel(id: ShortcutId, t: TFunction): string {
+  return t(SHORTCUT_LABELS[id])
 }
 
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
@@ -92,10 +102,38 @@ export function formatShortcut(b: ShortcutBinding): string {
   return parts.join('+')
 }
 
+/**
+ * Physical key name from `KeyboardEvent.code` (layout independent).
+ * macOS turns Option+letter into a different `event.key` (Option+L -> "¬"),
+ * so bindings that include Alt must fall back to the physical key.
+ */
+function physicalKey(e: KeyboardEvent): string {
+  const code = e.code || ''
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase()
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  switch (code) {
+    case 'Comma': return ','
+    case 'Period': return '.'
+    case 'Slash': return '/'
+    case 'Backslash': return '\\'
+    case 'Semicolon': return ';'
+    case 'Quote': return "'"
+    case 'BracketLeft': return '['
+    case 'BracketRight': return ']'
+    case 'Minus': return '-'
+    case 'Equal': return '='
+    case 'Backquote': return '`'
+    case 'Space': return ' '
+    default: return ''
+  }
+}
+
 export function eventMatchesShortcut(e: KeyboardEvent, b: ShortcutBinding): boolean {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
   const want = b.key.length === 1 ? b.key.toLowerCase() : b.key
-  if (key !== want) return false
+  // Alt/Option changes event.key on some layouts; compare the physical key too.
+  const altAltered = Boolean(e.altKey) && key !== want && physicalKey(e) === want
+  if (key !== want && !altAltered) return false
 
   // Treat Ctrl bindings as Cmd-or-Ctrl so the same defaults work on macOS.
   if (b.ctrl) {
@@ -114,8 +152,11 @@ export function eventMatchesShortcut(e: KeyboardEvent, b: ShortcutBinding): bool
 /** Build binding from a keydown event (for capture UI). */
 export function bindingFromEvent(e: KeyboardEvent): ShortcutBinding | null {
   if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta') return null
+  // Record the physical key when Option rewrites event.key (Option+L -> "¬"),
+  // so the captured binding stays portable.
+  const rawKey = e.altKey ? (physicalKey(e) || e.key) : e.key
   return {
-    key: e.key.length === 1 ? e.key.toLowerCase() : e.key,
+    key: rawKey.length === 1 ? rawKey.toLowerCase() : rawKey,
     ctrl: e.ctrlKey || undefined,
     meta: e.metaKey || undefined,
     alt: e.altKey || undefined,

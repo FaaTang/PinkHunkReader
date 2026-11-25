@@ -68,9 +68,18 @@
   opacity: 1;
 }
 
+/* Locate is an accent action: keep it tied to the theme accent colour. */
+.tab:hover .tab-locate {
+  color: var(--ph-accent-2);
+}
+
+.tab.active .tab-locate {
+  color: var(--ph-accent);
+}
+
 .tab-locate:hover {
   color: var(--ph-accent-2);
-  background: var(--ph-bg-hover);
+  background: var(--ph-accent-soft);
 }
 
 .tab-close {
