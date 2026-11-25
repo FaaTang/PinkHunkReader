@@ -38,6 +38,11 @@ type App struct {
 	shellOpenMu    sync.Mutex
 	shellOpenReady bool
 	shellOpenBuf   []define.ShellOpenRequest
+
+	// externalOpenMu buffers macOS "Open With" file events that arrive before
+	// Startup has a Wails context (cold launch from Finder).
+	externalOpenMu      sync.Mutex
+	externalOpenPending []string
 }
 
 func NewApp() *App {

@@ -47,6 +47,10 @@ func parseLaunchArgs(args []string) launchOptions {
 			p := strings.TrimSpace(strings.TrimPrefix(arg, "--open="))
 			opts.OpenPaths = append(opts.OpenPaths, p)
 			opts.OpenPath = p
+		case strings.HasPrefix(arg, "-psn_"):
+			// macOS Finder appends a process serial number when launching via
+			// LaunchServices ("Open With"); it is not a file path.
+			continue
 		case arg == "--open-dir":
 			opts.OpenIsDir = true
 		case arg == "--restore":

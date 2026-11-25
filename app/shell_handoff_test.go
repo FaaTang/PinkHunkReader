@@ -75,3 +75,17 @@ func TestNormalizeShellPrefs(t *testing.T) {
 		t.Fatal("expected true")
 	}
 }
+
+func TestParseLaunchArgsIgnoresFinderPSN(t *testing.T) {
+	opts := parseLaunchArgs([]string{"-psn_0_123456", `--open-file=/tmp/a.md`})
+	if opts.OpenPath != "/tmp/a.md" {
+		t.Fatalf("OpenPath=%q", opts.OpenPath)
+	}
+	if len(opts.OpenPaths) != 1 || opts.OpenPaths[0] != "/tmp/a.md" {
+		t.Fatalf("OpenPaths=%v", opts.OpenPaths)
+	}
+	only := parseLaunchArgs([]string{"-psn_0_123456"})
+	if only.OpenPath != "" || len(only.OpenPaths) != 0 {
+		t.Fatalf("psn must not become a path: %+v", only)
+	}
+}

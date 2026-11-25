@@ -89,6 +89,17 @@ func (a *App) ReadyForShellOpen() []define.ShellOpenRequest {
 	if a == nil {
 		return nil
 	}
+	// Fold macOS open-file events buffered before Startup into the same
+	// hand-off queue the frontend drains here.
+	a.externalOpenMu.Lock()
+	if len(a.externalOpenPending) > 0 {
+		pending := append([]string{}, a.externalOpenPending...)
+		a.externalOpenPending = nil
+		a.shellOpenMu.Lock()
+		a.shellOpenBuf = append(a.shellOpenBuf, define.ShellOpenRequest{Paths: pending, Focus: true})
+		a.shellOpenMu.Unlock()
+	}
+	a.externalOpenMu.Unlock()
 	a.shellOpenMu.Lock()
 	a.shellOpenReady = true
 	out := append([]define.ShellOpenRequest{}, a.shellOpenBuf...)

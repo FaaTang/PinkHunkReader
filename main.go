@@ -58,6 +58,8 @@ func main() {
 			TitleBar:             mac.TitleBarHiddenInset(),
 			Appearance:           mac.DefaultAppearance,
 			WebviewIsTransparent: true,
+			// Finder "Open With" delivers documents via an Apple Event, not argv.
+			OnFileOpen: application.HandleExternalOpen,
 			About: &mac.AboutInfo{
 				Title:   "PinkHunkReader",
 				Message: "Local file browser · Markdown · PDF · images",
