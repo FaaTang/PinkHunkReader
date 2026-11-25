@@ -53,8 +53,10 @@ func main() {
 		Mac: &mac.Options{
 			// Native traffic lights stay top-left; content draws under the titlebar.
 			// Do not draw Windows-style caption buttons in the webview on macOS.
+			// Appearance follows the OS so WKWebView reports the real
+			// prefers-color-scheme; forcing Aqua would break "follow system".
 			TitleBar:             mac.TitleBarHiddenInset(),
-			Appearance:           mac.NSAppearanceNameAqua,
+			Appearance:           mac.DefaultAppearance,
 			WebviewIsTransparent: true,
 			About: &mac.AboutInfo{
 				Title:   "PinkHunkReader",
