@@ -4,7 +4,7 @@ import { ReadBytes } from '../../wailsjs/go/app/App'
 import { GoToButton } from '../components/GoToButton'
 import { ViewerLoading } from '../components/ViewerLoading'
 import { hasOutlinePreference, usePersistedOutlineOpen } from '../hooks/usePersistedOutlineOpen'
-import { useRegisterGoTo } from '../settings/AppSettingsContext'
+import { useAppSettings, useRegisterGoTo } from '../settings/AppSettingsContext'
 import { t, useT } from '../i18n'
 import './viewers.css'
 
@@ -34,6 +34,7 @@ const RENDER_PAD = 1 // pages above/below viewport to keep painted
 
 export function PdfView({ path, active = true }: Props) {
   const t = useT()
+  const { darkMode } = useAppSettings()
   const scrollRef = useRef<HTMLDivElement>(null)
   const pageElsRef = useRef<Map<number, HTMLDivElement>>(new Map())
   const canvasElsRef = useRef<Map<number, HTMLCanvasElement>>(new Map())
@@ -496,7 +497,7 @@ export function PdfView({ path, active = true }: Props) {
           </aside>
         ) : null}
 
-        <div className="pdf-canvas-wrap" ref={scrollRef}>
+        <div className={`pdf-canvas-wrap${darkMode ? ' pdf-canvas-dark' : ''}`} ref={scrollRef}>
           {layouts.map((layout) => (
             <div
               key={layout.page}

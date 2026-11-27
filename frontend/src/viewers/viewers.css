@@ -117,7 +117,7 @@
 /* Inline code: light grey, no pink accent wash */
 .preview-wrap code {
   font-family: var(--ph-font-mono);
-  background: rgba(15, 23, 42, 0.06);
+  background: color-mix(in srgb, var(--ph-fg-1) 12%, transparent);
   color: var(--ph-fg-1);
   padding: 1px 5px;
   border-radius: 3px;
@@ -202,7 +202,7 @@
   justify-content: center;
   gap: 10px;
   padding: 10px 12px;
-  background: rgba(15, 23, 42, 0.04);
+  background: color-mix(in srgb, var(--ph-fg-1) 6%, transparent);
   border-top: 1px solid var(--ph-br-1);
   color: var(--ph-fg-3);
   font-size: 12px;
@@ -214,7 +214,7 @@
   margin-top: 8px;
   border: 1px solid var(--ph-br-1);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--ph-bg-panel) 92%, transparent);
   backdrop-filter: blur(4px);
   z-index: 2;
 }
@@ -249,7 +249,8 @@
   align-items: center;
   justify-content: center;
   overflow: auto;
-  background: #111827;
+  /* Neutral backdrop derived from the theme instead of a fixed dark slate. */
+  background: var(--ph-bg-app);
   position: relative;
 }
 
@@ -431,7 +432,7 @@
 
 .pdf-page {
   flex-shrink: 0;
-  background: #fff;
+  background: var(--ph-bg-panel);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
@@ -439,6 +440,21 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* Dark theme: invert the rendered page so PDFs match the app theme.
+ * hue-rotate(180deg) roughly restores the original hues of coloured content. */
+.pdf-canvas-dark {
+  background: var(--ph-bg-app);
+}
+
+.pdf-canvas-dark .pdf-page {
+  background: #101014;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.pdf-canvas-dark .pdf-page canvas {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 /* Markdown outline (same interaction model as PDF outline) */
@@ -692,7 +708,9 @@
 .office-doc-scroll .office-doc {
   flex: none;
   overflow: visible;
-  background: #fff;
+  /* Follow the app theme: a hardcoded white "paper" is unreadable in dark mode. */
+  background: var(--ph-bg-panel);
+  color: var(--ph-fg-1);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   padding: 48px 56px;
   box-sizing: border-box;
