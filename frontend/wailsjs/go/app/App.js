@@ -74,6 +74,14 @@ export function GetShellIntegrationPrefs() {
   return window['go']['app']['App']['GetShellIntegrationPrefs']();
 }
 
+export function HandleExternalOpen(arg1) {
+  return window['go']['app']['App']['HandleExternalOpen'](arg1);
+}
+
+export function HandleExternalOpenPaths(arg1) {
+  return window['go']['app']['App']['HandleExternalOpenPaths'](arg1);
+}
+
 export function InspectPath(arg1) {
   return window['go']['app']['App']['InspectPath'](arg1);
 }

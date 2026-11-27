@@ -39,6 +39,10 @@ export function GetRoots():Promise<Array<string>>;
 
 export function GetShellIntegrationPrefs():Promise<define.ShellIntegrationPrefs>;
 
+export function HandleExternalOpen(arg1:string):Promise<void>;
+
+export function HandleExternalOpenPaths(arg1:Array<string>):Promise<void>;
+
 export function InspectPath(arg1:string):Promise<define.PickOpenResult>;
 
 export function InstallUpdateAndRestart():Promise<define.QueryResult>;

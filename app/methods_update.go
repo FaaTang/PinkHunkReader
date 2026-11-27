@@ -1319,6 +1319,20 @@ log() {
   echo "[$(date '+%%Y-%%m-%%d %%H:%%M:%%S')] $*" >> "$LOG_FILE"
 }
 
+# Surface failures to the user: without this an aborted install looks like
+# nothing happened (the app just quits).
+notify() {
+  local title="$1"
+  local message="$2"
+  /usr/bin/osascript -e "display notification \"%%s\" with title \"%%s\"" "$message" "$title" >>"$LOG_FILE" 2>&1 || true
+}
+
+fail() {
+  log "FAILED: $*"
+  notify "PinkHunkReader 更新失败" "$*（详见 $LOG_FILE）"
+  exit 1
+}
+
 resolve_app_bin_rel() {
   local app="$1"
   local macos="$app/Contents/MacOS"
@@ -1390,13 +1404,18 @@ replace_app_direct() {
 %s
 
 log "updater started"
+WAITED=0
 while kill -0 $PID 2>/dev/null; do
   sleep 1
+  WAITED=$((WAITED + 1))
+  if [ "$WAITED" -ge 120 ]; then
+    log "host still alive after 120s, continuing anyway"
+    break
+  fi
 done
 log "host process exited"
 if ! hdiutil attach "$DMG" -nobrowse -quiet -mountpoint "$MOUNT_DIR" >>"$LOG_FILE" 2>&1; then
-  log "hdiutil attach failed: $DMG -> $MOUNT_DIR"
-  exit 1
+  fail "无法挂载更新包"
 fi
 
 # 不能用 ls *.app：ls 会展开 .app 目录的内容，得到 Contents 而不是 .app 路径。
@@ -1411,14 +1430,12 @@ if [ -z "$APP_SRC" ]; then
   APP_SRC=$(find "$MOUNT_DIR" -maxdepth 1 -type d -name "*.app" 2>/dev/null | head -n 1 || true)
 fi
 if [ -z "$APP_SRC" ] || [ ! -d "$APP_SRC/Contents" ]; then
-  log "no .app found inside dmg (mount=$MOUNT_DIR, app_src=$APP_SRC)"
   hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
-  exit 1
+  fail "更新包内未找到应用"
 fi
 if ! APP_BIN_REL=$(resolve_app_bin_rel "$APP_SRC"); then
-  log "no binary in source app: $APP_SRC"
   hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
-  exit 1
+  fail "更新包内缺少可执行文件"
 fi
 
 log "install source: $APP_SRC"
@@ -1427,22 +1444,22 @@ log "source binary: $APP_BIN_REL"
 if ! replace_app_direct; then
   log "direct replace failed, trying admin replace"
   if ! run_admin_replace >>"$LOG_FILE" 2>&1; then
-    log "admin replace failed"
     hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
+    notify "PinkHunkReader 更新失败" "无法替换已安装的应用（权限被拒绝或已取消）。旧版本已重新打开。"
     relaunch_app
     exit 1
   fi
 fi
 
 if ! APP_BIN_REL=$(resolve_app_bin_rel "$TARGET_APP"); then
-  log "target app binary missing after replace: $TARGET_APP"
   hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
+  notify "PinkHunkReader 更新失败" "替换后目标应用不可用，已重新打开旧版本。"
   relaunch_app
   exit 1
 fi
 if [ ! -x "$TARGET_APP/$APP_BIN_REL" ]; then
-  log "target app binary missing after replace: $TARGET_APP/$APP_BIN_REL"
   hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
+  notify "PinkHunkReader 更新失败" "替换后可执行文件缺失，已重新打开旧版本。"
   relaunch_app
   exit 1
 fi
