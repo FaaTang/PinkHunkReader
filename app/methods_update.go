@@ -1,4 +1,4 @@
-﻿package app
+package app
 
 import (
 	"context"
@@ -1271,22 +1271,33 @@ func buildWindowsLaunchCommand(scriptPath string) *exec.Cmd {
 
 func buildMacScript(dmgPath, targetApp, stagedDir, mountDir, logPath string, pid int, windowID string) string {
 	windowID = strings.TrimSpace(windowID)
+	appBundle := filepath.Base(targetApp)
+	appName := strings.TrimSuffix(appBundle, ".app")
+	knownBins := strings.TrimSpace(appName + " PinkHunkReader")
+	knownApps := strings.TrimSpace(appBundle + " PinkHunkReader.app")
+
 	relaunch := `relaunch_app() {
+  if /usr/bin/open -n -a "$TARGET_APP" >>"$LOG_FILE" 2>&1; then
+    return 0
+  fi
   if /usr/bin/open -n "$TARGET_APP" >>"$LOG_FILE" 2>&1; then
     return 0
   fi
-  log "open -n failed, trying binary launch"
-  "$TARGET_APP/$APP_BIN_REL" >>"$LOG_FILE" 2>&1 &
+  log "open failed, trying binary launch"
+  nohup "$TARGET_APP/$APP_BIN_REL" >>"$LOG_FILE" 2>&1 &
   return 0
 }`
 	if windowID != "" {
 		relaunch = fmt.Sprintf(`relaunch_app() {
   RESTORE_ARGS=(--window-id=%s --restore)
+  if /usr/bin/open -n -a "$TARGET_APP" --args "${RESTORE_ARGS[@]}" >>"$LOG_FILE" 2>&1; then
+    return 0
+  fi
   if /usr/bin/open -n "$TARGET_APP" --args "${RESTORE_ARGS[@]}" >>"$LOG_FILE" 2>&1; then
     return 0
   fi
-  log "open -n failed, trying binary launch"
-  "$TARGET_APP/$APP_BIN_REL" "${RESTORE_ARGS[@]}" >>"$LOG_FILE" 2>&1 &
+  log "open failed, trying binary launch"
+  nohup "$TARGET_APP/$APP_BIN_REL" "${RESTORE_ARGS[@]}" >>"$LOG_FILE" 2>&1 &
   return 0
 }`, windowID)
 	}
@@ -1298,13 +1309,35 @@ TARGET_APP="%s"
 STAGED="%s"
 MOUNT_DIR="%s"
 LOG_FILE="%s"
+KNOWN_BINS="%s"
+KNOWN_APPS="%s"
 TMP_APP="${TARGET_APP}.new"
 BACKUP_APP="${TARGET_APP}.backup"
-APP_BIN_NAME=$(basename "$TARGET_APP" .app)
-APP_BIN_REL="Contents/MacOS/$APP_BIN_NAME"
+APP_BIN_REL=""
 
 log() {
   echo "[$(date '+%%Y-%%m-%%d %%H:%%M:%%S')] $*" >> "$LOG_FILE"
+}
+
+resolve_app_bin_rel() {
+  local app="$1"
+  local macos="$app/Contents/MacOS"
+  local name found
+  if [ ! -d "$macos" ]; then
+    return 1
+  fi
+  for name in $KNOWN_BINS "$(basename "$app" .app)"; do
+    if [ -n "$name" ] && [ -x "$macos/$name" ]; then
+      echo "Contents/MacOS/$name"
+      return 0
+    fi
+  done
+  found=$(find "$macos" -maxdepth 1 \( -type f -o -type l \) ! -name '.*' 2>/dev/null | head -n 1 || true)
+  if [ -n "$found" ]; then
+    echo "Contents/MacOS/$(basename "$found")"
+    return 0
+  fi
+  return 1
 }
 
 run_admin_replace() {
@@ -1361,23 +1394,56 @@ while kill -0 $PID 2>/dev/null; do
   sleep 1
 done
 log "host process exited"
-hdiutil attach "$DMG" -nobrowse -quiet -mountpoint "$MOUNT_DIR" >>"$LOG_FILE" 2>&1
-APP_SRC=$(ls "$MOUNT_DIR"/*.app 2>/dev/null | head -n 1 || true)
+if ! hdiutil attach "$DMG" -nobrowse -quiet -mountpoint "$MOUNT_DIR" >>"$LOG_FILE" 2>&1; then
+  log "hdiutil attach failed: $DMG -> $MOUNT_DIR"
+  exit 1
+fi
+
+# 不能用 ls *.app：ls 会展开 .app 目录的内容，得到 Contents 而不是 .app 路径。
+APP_SRC=""
+for name in $KNOWN_APPS; do
+  if [ -d "$MOUNT_DIR/$name" ] && [ -d "$MOUNT_DIR/$name/Contents" ]; then
+    APP_SRC="$MOUNT_DIR/$name"
+    break
+  fi
+done
 if [ -z "$APP_SRC" ]; then
-  log "no .app found inside dmg"
+  APP_SRC=$(find "$MOUNT_DIR" -maxdepth 1 -type d -name "*.app" 2>/dev/null | head -n 1 || true)
+fi
+if [ -z "$APP_SRC" ] || [ ! -d "$APP_SRC/Contents" ]; then
+  log "no .app found inside dmg (mount=$MOUNT_DIR, app_src=$APP_SRC)"
+  hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
+  exit 1
+fi
+if ! APP_BIN_REL=$(resolve_app_bin_rel "$APP_SRC"); then
+  log "no binary in source app: $APP_SRC"
   hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
   exit 1
 fi
 
+log "install source: $APP_SRC"
 log "install target: $TARGET_APP"
+log "source binary: $APP_BIN_REL"
 if ! replace_app_direct; then
   log "direct replace failed, trying admin replace"
-  run_admin_replace >>"$LOG_FILE" 2>&1
+  if ! run_admin_replace >>"$LOG_FILE" 2>&1; then
+    log "admin replace failed"
+    hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
+    relaunch_app
+    exit 1
+  fi
 fi
 
+if ! APP_BIN_REL=$(resolve_app_bin_rel "$TARGET_APP"); then
+  log "target app binary missing after replace: $TARGET_APP"
+  hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
+  relaunch_app
+  exit 1
+fi
 if [ ! -x "$TARGET_APP/$APP_BIN_REL" ]; then
   log "target app binary missing after replace: $TARGET_APP/$APP_BIN_REL"
   hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
+  relaunch_app
   exit 1
 fi
 
@@ -1385,7 +1451,7 @@ hdiutil detach "$MOUNT_DIR" -quiet >>"$LOG_FILE" 2>&1 || true
 rm -rf "$MOUNT_DIR" "$DMG" "$STAGED" >>"$LOG_FILE" 2>&1 || true
 relaunch_app
 log "relaunch requested"
-	`, pid, dmgPath, targetApp, stagedDir, mountDir, logPath, relaunch)
+	`, pid, dmgPath, targetApp, stagedDir, mountDir, logPath, knownBins, knownApps, relaunch)
 }
 
 func buildLinuxScript(tarPath, targetExe, stagedDir string, pid int, windowID string) string {
