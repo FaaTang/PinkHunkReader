@@ -169,6 +169,9 @@ export function SettingsModal({ update }: Props) {
     setThemeMode,
     setThemeAccent,
     resetThemeAccent,
+    darkMode,
+    viewers,
+    setPdfDarkInvert,
   } = useAppSettings()
   const [capturing, setCapturing] = useState<ShortcutId | null>(null)
   const [recentDraft, setRecentDraft] = useState(String(recentMax))
@@ -543,6 +546,24 @@ export function SettingsModal({ update }: Props) {
                         )
                       })}
                     </div>
+                  </div>
+                  <div className="settings-row settings-row-stack">
+                    <label className="settings-check">
+                      <input
+                        type="checkbox"
+                        checked={viewers.pdfDarkInvert}
+                        disabled={!darkMode}
+                        onChange={(e) => setPdfDarkInvert(e.target.checked)}
+                      />
+                      <span>
+                        {t('settings.appearance.pdfDarkInvertTitle')}
+                        <span className="settings-row-sub">
+                          {darkMode
+                            ? t('settings.appearance.pdfDarkInvertDescription')
+                            : t('settings.appearance.pdfDarkInvertLightHint')}
+                        </span>
+                      </span>
+                    </label>
                   </div>
                 </div>
                 <div className="settings-actions">

@@ -49,6 +49,11 @@ const zh: Record<keyof typeof en, string> = {
   'settings.appearance.accentTitle': '强调色',
   'settings.appearance.accentDescription': '用于高亮、选中状态与主要操作',
   'settings.appearance.accentAria': '强调色',
+  'settings.appearance.pdfDarkInvertTitle': 'PDF 深色反色',
+  'settings.appearance.pdfDarkInvertDescription':
+    '深色模式下反色显示 PDF 页面。扫描件或图片较多的文档建议关闭。',
+  'settings.appearance.pdfDarkInvertLightHint': '仅在深色模式下生效（或跟随深色系统主题时）',
+
   'settings.appearance.languageTitle': '语言',
   'settings.appearance.languageDescription': '界面显示语言',
 

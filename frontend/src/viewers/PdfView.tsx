@@ -34,7 +34,7 @@ const RENDER_PAD = 1 // pages above/below viewport to keep painted
 
 export function PdfView({ path, active = true }: Props) {
   const t = useT()
-  const { darkMode } = useAppSettings()
+  const { darkMode, viewers } = useAppSettings()
   const scrollRef = useRef<HTMLDivElement>(null)
   const pageElsRef = useRef<Map<number, HTMLDivElement>>(new Map())
   const canvasElsRef = useRef<Map<number, HTMLCanvasElement>>(new Map())
@@ -497,7 +497,7 @@ export function PdfView({ path, active = true }: Props) {
           </aside>
         ) : null}
 
-        <div className={`pdf-canvas-wrap${darkMode ? ' pdf-canvas-dark' : ''}`} ref={scrollRef}>
+        <div className={`pdf-canvas-wrap${darkMode && viewers.pdfDarkInvert ? ' pdf-canvas-dark' : ''}`} ref={scrollRef}>
           {layouts.map((layout) => (
             <div
               key={layout.page}

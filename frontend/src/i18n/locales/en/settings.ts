@@ -50,6 +50,11 @@ const en = {
   'settings.appearance.accentDescription':
     'Used for highlights, selection, and primary actions',
   'settings.appearance.accentAria': 'Accent color',
+  'settings.appearance.pdfDarkInvertTitle': 'Dark PDF pages',
+  'settings.appearance.pdfDarkInvertDescription':
+    'Invert PDF pages in dark mode. Turn off for scanned or image-heavy documents.',
+  'settings.appearance.pdfDarkInvertLightHint': 'Only applies in dark mode (or when following a dark system)',
+
   'settings.appearance.languageTitle': 'Language',
   'settings.appearance.languageDescription': 'Interface language',
 

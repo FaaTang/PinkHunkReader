@@ -22,6 +22,11 @@ import {
   saveAutoSavePreferences,
 } from './autoSavePreferences'
 import {
+  type ViewerPreferences,
+  loadViewerPreferences,
+  saveViewerPreferences,
+} from './viewerPreferences'
+import {
   applyThemeToDocument,
   DEFAULT_ACCENT_HEX,
   loadThemePreferences,
@@ -57,6 +62,8 @@ interface AppSettingsValue {
   autoSave: AutoSavePreferences
   setAutoSaveEnabled: (enabled: boolean) => void
   setAutoSaveIntervalSeconds: (seconds: number) => void
+  viewers: ViewerPreferences
+  setPdfDarkInvert: (enabled: boolean) => void
   theme: ThemePreferences
   darkMode: boolean
   setThemeMode: (mode: ThemeMode) => void
@@ -81,6 +88,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [recentMax, setRecentMaxState] = useState(() => loadRecentMax())
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => loadRecentFiles(loadRecentMax()))
   const [autoSave, setAutoSaveState] = useState<AutoSavePreferences>(() => loadAutoSavePreferences())
+  const [viewers, setViewersState] = useState<ViewerPreferences>(() => loadViewerPreferences())
   const [theme, setThemeState] = useState<ThemePreferences>(() => loadThemePreferences())
   const [systemDark, setSystemDark] = useState(() => readSystemPrefersDark())
   const [goToOpen, setGoToOpen] = useState(false)
@@ -151,6 +159,10 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setAutoSaveState((prev) => saveAutoSavePreferences({ ...prev, intervalSeconds: seconds }))
   }, [])
 
+  const setPdfDarkInvert = useCallback((enabled: boolean) => {
+    setViewersState((prev) => saveViewerPreferences({ ...prev, pdfDarkInvert: enabled }))
+  }, [])
+
   const registerGoTo = useCallback((target: GoToTarget | null) => {
     goToTargetRef.current = target
     setGoToTarget(target)
@@ -168,6 +180,8 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     autoSave,
     setAutoSaveEnabled,
     setAutoSaveIntervalSeconds,
+    viewers,
+    setPdfDarkInvert,
     theme,
     darkMode,
     setThemeMode,
@@ -200,6 +214,8 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     autoSave,
     setAutoSaveEnabled,
     setAutoSaveIntervalSeconds,
+    viewers,
+    setPdfDarkInvert,
     theme,
     darkMode,
     setThemeMode,
