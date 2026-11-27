@@ -351,6 +351,22 @@ export function PdfView({ path, active = true }: Props) {
     paintedRef.current.clear()
   }
 
+  // Cmd/Ctrl + wheel (and trackpad pinch, which reports ctrlKey on macOS)
+  // zooms the document; a plain wheel keeps scrolling as usual.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || loading || !active) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const step = e.deltaY > 0 ? -10 : 10
+      setZoomPct((z) => Math.min(300, Math.max(50, z + step)))
+      paintedRef.current.clear()
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [loading, active])
+
   // Best outline entry for the current page: last item whose page <= current (depth-first).
   const activeOutline = useMemo(() => findOutlineForPage(outline, page), [outline, page])
 
